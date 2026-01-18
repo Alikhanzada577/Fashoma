@@ -10,6 +10,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/playfair-display';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -106,10 +107,7 @@ export default function OnboardingScreen() {
           ]}
         >
           {currentData.title.map((line, index) => {
-            // Screen 1: "Enjoy" (italic), "Shopping Again" (regular)
-            // Screen 2: "Your personal shopper," (italic), "in your pocket." (regular)
-            // Screen 3: "Confidence" (italic), "before checkout." (regular)
-            // Screen 4: "Private by Design" (Playfair medium, not italic)
+           
             const isItalicPlayfairLine =
               (currentStep === 0 && index === 0) ||
               (currentStep === 1 && index === 0) ||
@@ -136,7 +134,7 @@ export default function OnboardingScreen() {
                     fontStyle: 'normal',
                   },
                   isMediumPlayfairLine && {
-                    fontFamily: 'PlayfairDisplayMedium',
+                    fontFamily: 'PlayfairDisplayRegular',
                     fontStyle: 'normal',
                   },
                   !isItalicPlayfairLine &&
@@ -161,7 +159,23 @@ export default function OnboardingScreen() {
         </View>
         
         {currentData.description && (
-          <Text style={styles.description}>{currentData.description}</Text>
+         <View style={styles.descriptionWrapper}>
+        {currentStep === 1 && (
+  <View style={[styles.blurCircle, styles.blurRight]}>
+    <View style={styles.blurColorLayer} />
+    <BlurView intensity={20} tint="default" style={StyleSheet.absoluteFill} />
+  </View>
+)}
+
+{currentStep === 2 && (
+  <View style={[styles.blurCircle, styles.blurLeft]}>
+    <View style={styles.blurColorLayer} />
+    <BlurView intensity={20} tint="default" style={StyleSheet.absoluteFill} />
+  </View>
+)}
+
+         <Text style={styles.description}>{currentData.description}</Text>
+       </View>
         )}
         
         {currentData.hasIllustration && (
@@ -232,6 +246,7 @@ const styles = StyleSheet.create({
   },
   contentLeft: {
     alignItems: 'flex-start',
+    paddingHorizontal: 24,
   },
   titleContainer: {
     alignItems: 'center',
@@ -239,7 +254,7 @@ const styles = StyleSheet.create({
   },
   titleContainerLeft: {
     alignItems: 'flex-start',
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     width: '100%',
   },
   title: {
@@ -263,6 +278,72 @@ const styles = StyleSheet.create({
   subtitleLeft: {
     textAlign: 'left',
     width: '100%',
+  },
+  descriptionWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    maxWidth: 360,
+    width: '100%',
+    overflow: 'visible',
+  },
+  floatingCircle: {
+    position: 'absolute',
+    width: 330,
+    height: 330,
+    borderRadius: 195,
+    backgroundColor: '#8FAF9A',
+   
+    left: '-10%',
+    top: '80%',
+    transform: [
+      { translateX: -195 },
+      { translateY: -195 }
+    ],
+    zIndex: -1,
+  },
+  blurCircle: {
+    position: 'absolute',
+    width: 330,
+    height: 330,
+    borderRadius: 165,
+    overflow: 'hidden',
+    zIndex: -1,
+  },
+  
+  blurColorLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#8FAF9A',
+    opacity: 0.5,
+  },
+  
+  blurLeft: {
+    left: '-10%',
+    top: '80%',
+    transform: [
+      { translateX: -195 },
+      { translateY: -195 },
+    ],
+  },
+  
+  blurRight: {
+    right: '10%',
+    top: '80%',
+    transform: [
+      { translateX: 195 },
+      { translateY: -165 },
+    ],
+  },
+  
+  floatingCircleRight: {
+    left: 'auto',
+    right: '10%',
+    transform: [
+      { translateX: 195 },
+      { translateY: -165 }
+    ],
+   
   },
   description: {
     fontSize: 17,
