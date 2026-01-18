@@ -5,6 +5,7 @@ import { Typography } from '@/constants/Typography';
 import { Inter_400Regular } from '@expo-google-fonts/inter';
 import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -33,7 +34,11 @@ export default function SignUpScreen() {
 
   const EyeIcon = () => (
     <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-      <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+      <Ionicons 
+        name={showPassword ? 'eye-outline' : 'eye-off-outline'} 
+        size={20} 
+        color={Colors.text.secondary} 
+      />
     </TouchableOpacity>
   );
 
@@ -67,26 +72,23 @@ export default function SignUpScreen() {
         
         <View style={styles.form}>
           <Input
-            label="Full Name"
             value={fullName}
             onChangeText={setFullName}
-            placeholder=""
+            placeholder="Full Name"
           />
           
           <Input
-            label="Email Address"
             value={email}
             onChangeText={setEmail}
-            placeholder=""
+            placeholder="Email Address"
             keyboardType="email-address"
             autoCapitalize="none"
           />
           
           <Input
-            label="Password"
             value={password}
             onChangeText={setPassword}
-            placeholder=""
+            placeholder="Password"
             secureTextEntry={!showPassword}
             rightIcon={<EyeIcon />}
           />
@@ -258,8 +260,5 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.sm,
     color: Colors.text.primary,
     fontWeight: Typography.fontWeights.semibold,
-  },
-  eyeIcon: {
-    fontSize: 16,
   },
 });
