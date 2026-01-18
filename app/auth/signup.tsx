@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
+import { Inter_400Regular } from '@expo-google-fonts/inter';
+import { Manrope_400Regular } from '@expo-google-fonts/manrope';
+import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
+import { router } from 'expo-router';
+import React, { useState } from 'react';
+import { Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
@@ -17,6 +20,16 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  const [fontsLoaded] = useFonts({
+    PlayfairDisplayRegular: PlayfairDisplay_400Regular,
+    ManropeRegular: Manrope_400Regular,
+    InterRegular: Inter_400Regular,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   const EyeIcon = () => (
     <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -79,7 +92,9 @@ export default function SignUpScreen() {
           />
         </View>
         
-        <Button title="Sign Up" onPress={handleSignUp} style={styles.signUpButton} />
+        <View style={styles.signUpButtonShadow}>
+          <Button title="Sign Up" onPress={handleSignUp} style={styles.signUpButton} />
+        </View>
         
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
@@ -87,21 +102,27 @@ export default function SignUpScreen() {
           <View style={styles.dividerLine} />
         </View>
         
-        <Button
-          title="Continue with Google"
-          onPress={handleGoogleSignUp}
-          variant="outline"
+        <TouchableOpacity 
           style={styles.googleButton}
-        />
+          onPress={handleGoogleSignUp}
+          activeOpacity={0.8}
+        >
+          <Image 
+            source={require('@/assets/images/Logo-google-icon-PNG.png')} 
+            style={styles.googleIcon}
+            resizeMode="contain"
+          />
+          <Text style={styles.googleButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
       </View>
       
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Already a member?{' '}
+        <View style={styles.footerTextContainer}>
+          <Text style={styles.footerText}>Already a member? </Text>
           <TouchableOpacity onPress={handleSignInPress}>
             <Text style={styles.signInLink}>Sign In</Text>
           </TouchableOpacity>
-        </Text>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -139,20 +160,45 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: Typography.fontSizes['3xl'],
-    fontWeight: Typography.fontWeights.semibold,
+    fontWeight: '400' as const,
+    fontFamily: 'PlayfairDisplayRegular',
     color: Colors.text.primary,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: Typography.fontSizes.base,
+    fontFamily: 'ManropeRegular',
+    fontWeight: '400' as const,
     color: Colors.text.secondary,
     lineHeight: Typography.lineHeights.normal * Typography.fontSizes.base,
   },
   form: {
     marginBottom: 24,
   },
+  signUpButtonShadow: {
+    marginBottom: 20,
+    width: '100%',
+    borderRadius: 999,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#8FAF9A',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+      web: {
+        boxShadow: '0 8px 20px rgba(143, 175, 154, 1)',
+      },
+    }),
+  },
   signUpButton: {
-    marginBottom: 24,
+    width: '100%',
+    borderRadius: 999,
+    minHeight: 56,
+    paddingVertical: 16,
   },
   divider: {
     flexDirection: 'row',
@@ -170,18 +216,46 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
   },
   googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingVertical: 4,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: Colors.gray[300],
+    borderRadius: 10,
+    backgroundColor: Colors.white,
     marginBottom: 24,
+    overflow: 'hidden',
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 12,
+  },
+  googleButtonText: {
+    fontSize: Typography.fontSizes.base,
+    fontFamily: 'InterRegular',
+    fontWeight: '400' as const,
+    color: Colors.text.primary,
+    letterSpacing: 1.2,
   },
   footer: {
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingBottom: 34,
   },
+  footerTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   footerText: {
     fontSize: Typography.fontSizes.sm,
     color: Colors.text.secondary,
   },
   signInLink: {
+    fontSize: Typography.fontSizes.sm,
     color: Colors.text.primary,
     fontWeight: Typography.fontWeights.semibold,
   },

@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { RadialGradient } from 'react-native-gradients';
 
 const onboardingData = [
   {
@@ -162,15 +163,39 @@ export default function OnboardingScreen() {
          <View style={styles.descriptionWrapper}>
         {currentStep === 1 && (
   <View style={[styles.blurCircle, styles.blurRight]}>
-    <View style={styles.blurColorLayer} />
-    <BlurView intensity={20} tint="default" style={StyleSheet.absoluteFill} />
+    <View style={StyleSheet.absoluteFill}>
+      <RadialGradient
+        x="50%"
+        y="50%"
+        rx="50%"
+        ry="50%"
+        colorList={[
+          { offset: '0%', color: 'rgba(143, 175, 154, 0.35)', opacity: '0.4' },
+          { offset: '50%', color: 'rgba(143, 175, 154, 0.05)', opacity: '0.4' },
+          { offset: '100%', color: 'rgba(143, 175, 154, 0)', opacity: '0' },
+        ]}
+      />
+    </View>
+    <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFill} />
   </View>
 )}
 
 {currentStep === 2 && (
   <View style={[styles.blurCircle, styles.blurLeft]}>
-    <View style={styles.blurColorLayer} />
-    <BlurView intensity={20} tint="default" style={StyleSheet.absoluteFill} />
+    <View style={StyleSheet.absoluteFill}>
+      <RadialGradient
+        x="50%"
+        y="50%"
+        rx="50%"
+        ry="50%"
+        colorList={[
+          { offset: '0%', color: 'rgba(143, 175, 154, 0.35)', opacity: '0.4' },
+          { offset: '50%', color: 'rgba(143, 175, 154, 0.05)', opacity: '0.4' },
+          { offset: '100%', color: 'rgba(143, 175, 154, 0)', opacity: '0' },
+        ]}
+      />
+    </View>
+    <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFill} />
   </View>
 )}
 
@@ -305,34 +330,28 @@ const styles = StyleSheet.create({
   },
   blurCircle: {
     position: 'absolute',
-    width: 330,
-    height: 330,
+    width: 360,
+    height: 360,
     borderRadius: 165,
     overflow: 'hidden',
     zIndex: -1,
   },
   
-  blurColorLayer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#8FAF9A',
-    opacity: 0.5,
-  },
-  
   blurLeft: {
-    left: '-10%',
+    left: '10%',
     top: '80%',
     transform: [
-      { translateX: -195 },
-      { translateY: -195 },
+      { translateX: -200 },
+      { translateY: -200 },
     ],
   },
   
   blurRight: {
-    right: '10%',
+    right: '0%',
     top: '80%',
     transform: [
-      { translateX: 195 },
-      { translateY: -165 },
+      { translateX: 200 },
+      { translateY: -180 },
     ],
   },
   
