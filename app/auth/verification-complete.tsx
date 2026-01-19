@@ -4,11 +4,15 @@ import { Typography } from '@/constants/Typography';
 import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
 export default function VerificationCompleteScreen() {
+  const params = useLocalSearchParams();
+  const email = params.email as string || '';
+  const otp = params.otp as string || '';
+  
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
     ManropeRegular: Manrope_400Regular,
@@ -19,7 +23,10 @@ export default function VerificationCompleteScreen() {
   }
 
   const handleContinue = () => {
-    router.push('/auth/reset-password');
+    router.push({
+      pathname: '/auth/reset-password',
+      params: { email, otp },
+    });
   };
 
   return (

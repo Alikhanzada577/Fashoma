@@ -6,7 +6,9 @@ import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { forgotPassword } from '@/services/auth.service';
+import { validateEmail } from '@/utils/validation';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
@@ -16,6 +18,8 @@ const BackButton = ({ onPress }: { onPress: () => void }) => (
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
@@ -30,9 +34,39 @@ export default function ForgotPasswordScreen() {
     router.back();
   };
 
-  const handleForgotPassword = () => {
-    // Navigate to OTP verification
-    router.push('/auth/otp-verification');
+  const handleForgotPassword = async () => {
+    // Clear previous error
+    setError('');
+
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || '');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const message = await forgotPassword({ email: email.trim().toLowerCase() });
+      
+      Alert.alert('Success', message, [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Navigate to OTP verification and pass email
+            router.push({
+              pathname: '/auth/otp-verification',
+              params: { email: email.trim().toLowerCase() },
+            });
+          },
+        },
+      ]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send OTP');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -50,16 +84,32 @@ export default function ForgotPasswordScreen() {
         <View style={styles.form}>
           <Input
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (error) setError('');
+            }}
             placeholder="Email Address"
             keyboardType="email-address"
             autoCapitalize="none"
+            error={error}
+            editable={!isLoading}
           />
         </View>
         
         <View style={styles.buttonShadow}>
-          <Button title="Forgot Password" onPress={handleForgotPassword} style={styles.button} />
+          <Button 
+            title={isLoading ? 'Sending...' : 'Send OTP'} 
+            onPress={handleForgotPassword} 
+            style={styles.button}
+            disabled={isLoading}
+          />
         </View>
+        
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -136,5 +186,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     minHeight: 56,
     paddingVertical: 16,
+  },
+  loadingContainer: {
+    marginTop: 16,
+    alignItems: 'center',
   },
 });

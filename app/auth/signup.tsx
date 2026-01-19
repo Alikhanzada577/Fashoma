@@ -8,7 +8,9 @@ import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfai
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { useAuth } from '@/contexts/AuthContext';
+import { validateName, validateEmail, validatePassword } from '@/utils/validation';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
@@ -21,6 +23,10 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState({ name: '', email: '', password: '' });
+
+  const { register } = useAuth();
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
@@ -46,22 +52,51 @@ export default function SignUpScreen() {
     router.back();
   };
 
-  const handleSignUp = () => {
-    console.log('Sign up pressed');
+  const handleSignUp = async () => {
+    // Clear previous errors
+    setErrors({ name: '', email: '', password: '' });
+
+    // Validate inputs
+    const nameValidation = validateName(fullName);
+    const emailValidation = validateEmail(email);
+    const passwordValidation = validatePassword(password);
+
+    if (!nameValidation.isValid || !emailValidation.isValid || !passwordValidation.isValid) {
+      setErrors({
+        name: nameValidation.error || '',
+        email: emailValidation.error || '',
+        password: passwordValidation.error || '',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await register(fullName.trim(), email.trim().toLowerCase(), password);
+      // Navigation is handled by AuthContext
+    } catch (error: any) {
+      Alert.alert('Registration Failed', error.message || 'An error occurred during registration');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleSignUp = () => {
-    console.log('Google sign up pressed');
+    Alert.alert('Coming Soon', 'Google Sign Up will be available soon');
   };
 
   const handleSignInPress = () => {
-    router.push('/auth/signin');
+    router.push({
+      pathname: '/auth/signin',
+    });
   };
 
   return (
     <SafeAreaView style={styles.container}>
+     
       <View style={styles.header}>
-        <BackButton onPress={handleBack} />
+        {/* <BackButton onPress={handleBack} /> */}
       </View>
       
       <View style={styles.content}>
@@ -73,30 +108,56 @@ export default function SignUpScreen() {
         <View style={styles.form}>
           <Input
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(text) => {
+              setFullName(text);
+              if (errors.name) setErrors({ ...errors, name: '' });
+            }}
             placeholder="Full Name"
+            error={errors.name}
+            editable={!isLoading}
           />
           
           <Input
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (errors.email) setErrors({ ...errors, email: '' });
+            }}
             placeholder="Email Address"
             keyboardType="email-address"
             autoCapitalize="none"
+            error={errors.email}
+            editable={!isLoading}
           />
           
           <Input
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (errors.password) setErrors({ ...errors, password: '' });
+            }}
             placeholder="Password"
             secureTextEntry={!showPassword}
             rightIcon={<EyeIcon />}
+            error={errors.password}
+            editable={!isLoading}
           />
         </View>
         
         <View style={styles.signUpButtonShadow}>
-          <Button title="Sign Up" onPress={handleSignUp} style={styles.signUpButton} />
+          <Button 
+            title={isLoading ? 'Signing Up...' : 'Sign Up'} 
+            onPress={handleSignUp} 
+            style={styles.signUpButton}
+            disabled={isLoading}
+          />
         </View>
+        
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
         
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
@@ -156,6 +217,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
+    paddingTop: 40, // Added padding since header is removed
   },
   titleContainer: {
     marginBottom: 32,
@@ -260,5 +322,9 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.sm,
     color: Colors.text.primary,
     fontWeight: Typography.fontWeights.semibold,
+  },
+  loadingContainer: {
+    marginTop: 16,
+    alignItems: 'center',
   },
 });

@@ -1,7 +1,7 @@
 const path = require('path');
 
 module.exports = function (api) {
-  api.cache(false); // Disable cache to ensure changes are picked up
+  api.cache(true);
   return {
     presets: ['babel-preset-expo'],
     plugins: [
@@ -15,6 +15,10 @@ module.exports = function (api) {
             '@/constants': path.resolve(__dirname, 'src/constants'),
             '@/hooks': path.resolve(__dirname, 'src/hooks'),
             '@/assets': path.resolve(__dirname, 'src/assets'),
+            '@/services': path.resolve(__dirname, 'src/services'),
+            '@/contexts': path.resolve(__dirname, 'src/contexts'),
+            '@/utils': path.resolve(__dirname, 'src/utils'),
+            '@/config': path.resolve(__dirname, 'src/config'),
             // General alias last - only for imports that don't match above
             '@': path.resolve(__dirname, '.'),
           },

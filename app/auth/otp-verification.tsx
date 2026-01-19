@@ -3,9 +3,10 @@ import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { verifyOTP, forgotPassword } from '@/services/auth.service';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
@@ -14,7 +15,12 @@ const BackButton = ({ onPress }: { onPress: () => void }) => (
 );
 
 export default function OTPVerificationScreen() {
+  const params = useLocalSearchParams();
+  const email = params.email as string || '';
+  
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const [fontsLoaded] = useFonts({
@@ -31,6 +37,9 @@ export default function OTPVerificationScreen() {
   };
 
   const handleOtpChange = (text: string, index: number) => {
+    // Only allow numbers
+    if (text && !/^\d+$/.test(text)) return;
+    
     const newOtp = [...otp];
     newOtp[index] = text;
     setOtp(newOtp);
@@ -47,12 +56,53 @@ export default function OTPVerificationScreen() {
     }
   };
 
-  const handleVerify = () => {
-    router.push('/auth/verification-complete');
+  const handleVerify = async () => {
+    const otpCode = otp.join('');
+    
+    if (otpCode.length !== 6) {
+      Alert.alert('Error', 'Please enter all 6 digits');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await verifyOTP({ email, otp: otpCode });
+      
+      // Navigate to verification complete, then to reset password
+      router.push({
+        pathname: '/auth/verification-complete',
+        params: { email, otp: otpCode },
+      });
+    } catch (error: any) {
+      Alert.alert('Verification Failed', error.message || 'Invalid or expired OTP');
+      // Clear OTP on error
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleResend = () => {
-    console.log('Resend OTP');
+  const handleResend = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Email not found. Please go back and try again.');
+      return;
+    }
+
+    setIsResending(true);
+
+    try {
+      const message = await forgotPassword({ email });
+      Alert.alert('Success', message);
+      // Clear OTP inputs
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to resend OTP');
+    } finally {
+      setIsResending(false);
+    }
   };
 
   return (
@@ -66,7 +116,7 @@ export default function OTPVerificationScreen() {
           <Text style={styles.title}>OTP Verification</Text>
           <Text style={styles.subtitle}>
             Enter the code that we have sent to {'\n'}
-            xxxxxxxxxxxx12@gmail.com
+            {email ? email.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'your email'}
           </Text>
         </View>
         
@@ -82,18 +132,32 @@ export default function OTPVerificationScreen() {
               keyboardType="number-pad"
               maxLength={1}
               selectTextOnFocus
+              editable={!isLoading}
             />
           ))}
         </View>
         
         <View style={styles.buttonShadow}>
-          <Button title="Verify" onPress={handleVerify} style={styles.button} />
+          <Button 
+            title={isLoading ? 'Verifying...' : 'Verify'} 
+            onPress={handleVerify} 
+            style={styles.button}
+            disabled={isLoading || isResending}
+          />
         </View>
+
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
 
         <View style={styles.resendContainer}>
           <Text style={styles.resendText}>Didn't receive code? </Text>
-          <TouchableOpacity onPress={handleResend}>
-            <Text style={styles.resendLink}>Resend</Text>
+          <TouchableOpacity onPress={handleResend} disabled={isResending || isLoading}>
+            <Text style={[styles.resendLink, (isResending || isLoading) && styles.resendLinkDisabled]}>
+              {isResending ? 'Resending...' : 'Resend'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -205,5 +269,13 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.sm,
     color: Colors.text.primary,
     fontWeight: Typography.fontWeights.semibold,
+  },
+  resendLinkDisabled: {
+    opacity: 0.5,
+  },
+  loadingContainer: {
+    marginTop: 16,
+    marginBottom: 16,
+    alignItems: 'center',
   },
 });

@@ -14,6 +14,10 @@ config.resolver = {
     '@/constants': path.resolve(__dirname, 'src/constants'),
     '@/hooks': path.resolve(__dirname, 'src/hooks'),
     '@/assets': path.resolve(__dirname, 'src/assets'),
+    '@/services': path.resolve(__dirname, 'src/services'),
+    '@/contexts': path.resolve(__dirname, 'src/contexts'),
+    '@/utils': path.resolve(__dirname, 'src/utils'),
+    '@/config': path.resolve(__dirname, 'src/config'),
   },
 };
 

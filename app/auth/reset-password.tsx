@@ -5,9 +5,11 @@ import { Typography } from '@/constants/Typography';
 import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { resetPassword } from '@/services/auth.service';
+import { validatePassword, validatePasswordMatch } from '@/utils/validation';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
@@ -16,10 +18,16 @@ const BackButton = ({ onPress }: { onPress: () => void }) => (
 );
 
 export default function ResetPasswordScreen() {
+  const params = useLocalSearchParams();
+  const email = params.email as string || '';
+  const otp = params.otp as string || '';
+  
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState({ password: '', confirmPassword: '' });
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
@@ -44,9 +52,50 @@ export default function ResetPasswordScreen() {
     </TouchableOpacity>
   );
 
-  const handleResetPassword = () => {
-    // Navigate to success or sign in
-    router.push('/auth/signin');
+  const handleResetPassword = async () => {
+    // Clear previous errors
+    setErrors({ password: '', confirmPassword: '' });
+
+    // Validate password
+    const passwordValidation = validatePassword(password);
+    const matchValidation = validatePasswordMatch(password, confirmPassword);
+
+    if (!passwordValidation.isValid || !matchValidation.isValid) {
+      setErrors({
+        password: passwordValidation.error || '',
+        confirmPassword: matchValidation.error || '',
+      });
+      return;
+    }
+
+    if (!email || !otp) {
+      Alert.alert('Error', 'Missing verification data. Please start over.');
+      router.push('/auth/forgot-password');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const message = await resetPassword({
+        email,
+        otp,
+        newPassword: password,
+      });
+
+      Alert.alert('Success', message, [
+        {
+          text: 'OK',
+          onPress: () => {
+            router.replace('/auth/signin');
+          },
+        },
+      ]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to reset password');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -66,24 +115,45 @@ export default function ResetPasswordScreen() {
         <View style={styles.form}>
           <Input
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (errors.password) setErrors({ ...errors, password: '' });
+            }}
             placeholder="Password"
             secureTextEntry={!showPassword}
             rightIcon={<EyeIcon isVisible={showPassword} onToggle={() => setShowPassword(!showPassword)} />}
+            error={errors.password}
+            editable={!isLoading}
           />
           
           <Input
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(text) => {
+              setConfirmPassword(text);
+              if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
+            }}
             placeholder="Confirm Password"
             secureTextEntry={!showConfirmPassword}
             rightIcon={<EyeIcon isVisible={showConfirmPassword} onToggle={() => setShowConfirmPassword(!showConfirmPassword)} />}
+            error={errors.confirmPassword}
+            editable={!isLoading}
           />
         </View>
         
         <View style={styles.buttonShadow}>
-          <Button title="Reset Password" onPress={handleResetPassword} style={styles.button} />
+          <Button 
+            title={isLoading ? 'Resetting...' : 'Reset Password'} 
+            onPress={handleResetPassword} 
+            style={styles.button}
+            disabled={isLoading}
+          />
         </View>
+        
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -160,5 +230,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     minHeight: 56,
     paddingVertical: 16,
+  },
+  loadingContainer: {
+    marginTop: 16,
+    alignItems: 'center',
   },
 });

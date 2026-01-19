@@ -18,6 +18,18 @@
       ],
       "@/assets/*": [
         "./src/assets/*"
+      ],
+      "@/services/*": [
+        "./src/services/*"
+      ],
+      "@/contexts/*": [
+        "./src/contexts/*"
+      ],
+      "@/utils/*": [
+        "./src/utils/*"
+      ],
+      "@/config/*": [
+        "./src/config/*"
       ]
     }
   },

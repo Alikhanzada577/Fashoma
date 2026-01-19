@@ -79,12 +79,12 @@ export default function OnboardingScreen() {
     if (currentStep < onboardingData.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      router.push('/auth/signup');
+      router.push('/auth/signin');
     }
   };
 
   const handleSkip = () => {
-    router.push('/auth/signup');
+    router.push('/auth/signin');
   };
 
   return (

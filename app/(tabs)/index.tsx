@@ -1,98 +1,219 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import React, { useState } from 'react';
+import { SafeAreaView, StyleSheet, Text, View, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Button } from '@/components/ui/Button';
+import { Colors } from '@/constants/Colors';
+import { Typography } from '@/constants/Typography';
+import { useAuth } from '@/contexts/AuthContext';
+import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
+import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { user, signOut, isLoading } = useAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const [fontsLoaded] = useFonts({
+    PlayfairDisplayRegular: PlayfairDisplay_400Regular,
+    ManropeRegular: Manrope_400Regular,
+  });
+
+  if (!fontsLoaded || isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            setIsSigningOut(true);
+            try {
+              await signOut();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to logout');
+            } finally {
+              setIsSigningOut(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Ionicons name="checkmark-circle" size={60} color={Colors.primary} />
+          <Text style={styles.title}>Welcome to Fashoma!</Text>
+          
+        </View>
+
+        {/* User Card */}
+        <View style={styles.userCard}>
+          <View style={styles.userIconContainer}>
+            <Ionicons name="person-circle-outline" size={50} color={Colors.primary} />
+          </View>
+          
+          <View style={styles.userInfo}>
+            <Text style={styles.label}>Name</Text>
+            <Text style={styles.value}>{user?.name || 'N/A'}</Text>
+          </View>
+
+          <View style={styles.userInfo}>
+            <Text style={styles.label}>Email</Text>
+            <Text style={styles.valueSmall}>{user?.email || 'N/A'}</Text>
+          </View>
+
+          <View style={styles.userInfo}>
+            <Text style={styles.label}>Provider</Text>
+            <Text style={styles.value}>{user?.authProvider || 'N/A'}</Text>
+          </View>
+
+          <View style={styles.userInfo}>
+            <Text style={styles.label}>Status</Text>
+            <View style={styles.badgeContainer}>
+              <View style={[styles.badge, user?.isEmailVerified ? styles.badgeSuccess : styles.badgeWarning]}>
+                <Text style={styles.badgeText}>
+                  {user?.isEmailVerified ? 'Verified' : 'Not Verified'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Logout Button */}
+        <View style={styles.buttonContainer}>
+          <Button 
+            title={isSigningOut ? 'Logging out...' : 'LOGOUT'} 
+            onPress={handleLogout}
+            variant="primary"
+            disabled={isSigningOut}
+          />
+        </View>
+
+        {isSigningOut && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  header: {
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 24,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  title: {
+    fontSize: Typography.fontSizes['2xl'],
+    fontWeight: '400',
+    fontFamily: 'PlayfairDisplayRegular',
+    color: Colors.text.primary,
+    marginTop: 12,
+    marginBottom: 4,
+    textAlign: 'center',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  subtitle: {
+    fontSize: Typography.fontSizes.sm,
+    fontFamily: 'ManropeRegular',
+    color: Colors.primary,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  userCard: {
+    backgroundColor: Colors.gray[50],
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  userIconContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  userInfo: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: Typography.fontSizes.xs,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+    marginBottom: 4,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  value: {
+    fontSize: Typography.fontSizes.base,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.primary,
+    fontWeight: '500',
+  },
+  valueSmall: {
+    fontSize: Typography.fontSizes.sm,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.primary,
+    fontWeight: '400',
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeSuccess: {
+    backgroundColor: '#10B981',
+  },
+  badgeWarning: {
+    backgroundColor: '#F59E0B',
+  },
+  badgeText: {
+    fontSize: Typography.fontSizes.xs,
+    color: Colors.white,
+    fontWeight: '600',
+  },
+  buttonContainer: {
+    marginTop: 'auto',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: Typography.fontSizes.base,
+    color: Colors.text.secondary,
+    fontFamily: 'ManropeRegular',
   },
 });
