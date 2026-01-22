@@ -9,12 +9,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { validateEmail } from '@/utils/validation';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
-    <Text style={styles.backArrow}>←</Text>
+    <Ionicons name="arrow-back" size={20} color={Colors.text.primary} />
   </TouchableOpacity>
 );
 
@@ -24,6 +25,7 @@ export default function SignInScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
+  const insets = useSafeAreaInsets();
 
   const { login } = useAuth();
 
@@ -97,7 +99,7 @@ export default function SignInScreen() {
   return (
     <SafeAreaView style={styles.container}>
      
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         {/* <BackButton onPress={handleBack} /> */}
       </View>
       
@@ -178,7 +180,7 @@ export default function SignInScreen() {
         </TouchableOpacity>
       </View>
       
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
         <View style={styles.footerTextContainer}>
           <Text style={styles.footerText}>Not a member? </Text>
           <TouchableOpacity onPress={handleSignUpPress}>
@@ -197,7 +199,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
     paddingBottom: 20,
   },
   backButton: {
@@ -207,11 +208,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray[100],
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backArrow: {
-    fontSize: 18,
-    color: Colors.text.primary,
-    fontWeight: '600',
   },
   content: {
     flex: 1,
@@ -316,7 +312,6 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingBottom: 34,
   },
   footerTextContainer: {
     flexDirection: 'row',

@@ -13,9 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Animated } from 'react-native';
 import { RadialGradient } from 'react-native-gradients';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const onboardingData = [
   {
@@ -62,6 +63,12 @@ const ProgressDots = ({ total, current }: { total: number; current: number }) =>
 export default function OnboardingScreen() {
   const [currentStep, setCurrentStep] = useState(0);
   const currentData = onboardingData[currentStep];
+  const insets = useSafeAreaInsets();
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const buttonFadeAnim = useRef(new Animated.Value(1)).current;
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayItalic: PlayfairDisplay_400Regular_Italic,
@@ -71,13 +78,59 @@ export default function OnboardingScreen() {
     InterMedium: Inter_500Medium,
   });
 
+  // Animate content when step changes
+  useEffect(() => {
+    // Reset and start animation
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+    buttonFadeAnim.setValue(0);
+    
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonFadeAnim, {
+        toValue: 1,
+        duration: 300,
+        delay: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [currentStep]);
+
   if (!fontsLoaded) {
     return null;
   }
 
   const handleNext = () => {
     if (currentStep < onboardingData.length - 1) {
-      setCurrentStep(currentStep + 1);
+      // Fade out before changing step
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: -30,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(buttonFadeAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setCurrentStep(currentStep + 1);
+      });
     } else {
       router.push('/auth/signin');
     }
@@ -89,16 +142,20 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <TouchableOpacity onPress={handleSkip}>
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       </View>
       
-      <View
+      <Animated.View
         style={[
           styles.content,
           currentStep === 3 && styles.contentLeft,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
         ]}
       >
         <View
@@ -231,9 +288,9 @@ export default function OnboardingScreen() {
             ))}
           </View>
         )}
-      </View>
+      </Animated.View>
       
-      <View style={styles.footer}>
+      <Animated.View style={[styles.footer, { opacity: buttonFadeAnim }]}>
         <View style={styles.nextButtonShadow}>
           <Button 
             title={currentStep === onboardingData.length - 1 ? "GET STARTED" : "NEXT"} 
@@ -242,7 +299,7 @@ export default function OnboardingScreen() {
           />
         </View>
         <ProgressDots total={onboardingData.length} current={currentStep} />
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -256,7 +313,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingHorizontal: 24,
-    paddingTop: 16,
   },
   skipText: {
     fontSize: 17,

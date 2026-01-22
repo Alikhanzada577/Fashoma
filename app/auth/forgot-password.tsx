@@ -2,17 +2,19 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
+import { Ionicons } from '@expo/vector-icons';
 import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { forgotPassword } from '@/services/auth.service';
 import { validateEmail } from '@/utils/validation';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
-    <Text style={styles.backArrow}>←</Text>
+    <Ionicons name="arrow-back" size={20} color={Colors.text.primary} />
   </TouchableOpacity>
 );
 
@@ -20,6 +22,7 @@ export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const insets = useSafeAreaInsets();
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
@@ -71,11 +74,11 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <BackButton onPress={handleBack} />
       </View>
       
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Password Recovery</Text>
           <Text style={styles.subtitle}>Enter your email to reset your password</Text>
@@ -122,7 +125,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
     paddingBottom: 20,
   },
   backButton: {
@@ -132,11 +134,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray[100],
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backArrow: {
-    fontSize: 18,
-    color: Colors.text.primary,
-    fontWeight: '600',
   },
   content: {
     flex: 1,

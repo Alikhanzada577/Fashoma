@@ -1,22 +1,25 @@
 import { Button } from '@/components/ui/Button';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
+import { Ionicons } from '@expo/vector-icons';
 import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Alert, Platform, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { verifyOTP, forgotPassword } from '@/services/auth.service';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
-    <Text style={styles.backArrow}>←</Text>
+    <Ionicons name="arrow-back" size={20} color={Colors.text.primary} />
   </TouchableOpacity>
 );
 
 export default function OTPVerificationScreen() {
   const params = useLocalSearchParams();
   const email = params.email as string || '';
+  const insets = useSafeAreaInsets();
   
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
@@ -107,11 +110,11 @@ export default function OTPVerificationScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <BackButton onPress={handleBack} />
       </View>
       
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
         <View style={styles.titleContainer}>
           <Text style={styles.title}>OTP Verification</Text>
           <Text style={styles.subtitle}>
@@ -172,7 +175,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
     paddingBottom: 20,
   },
   backButton: {
@@ -182,11 +184,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray[100],
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backArrow: {
-    fontSize: 18,
-    color: Colors.text.primary,
-    fontWeight: '600',
   },
   content: {
     flex: 1,

@@ -8,12 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resetPassword } from '@/services/auth.service';
 import { validatePassword, validatePasswordMatch } from '@/utils/validation';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
-    <Text style={styles.backArrow}>←</Text>
+    <Ionicons name="arrow-back" size={20} color={Colors.text.primary} />
   </TouchableOpacity>
 );
 
@@ -21,6 +22,7 @@ export default function ResetPasswordScreen() {
   const params = useLocalSearchParams();
   const email = params.email as string || '';
   const otp = params.otp as string || '';
+  const insets = useSafeAreaInsets();
   
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -100,11 +102,11 @@ export default function ResetPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <BackButton onPress={handleBack} />
       </View>
       
-      <View style={styles.content}>
+      <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}>
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Create a new password</Text>
           <Text style={styles.subtitle}>
@@ -166,7 +168,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
     paddingBottom: 20,
   },
   backButton: {
@@ -176,11 +177,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray[100],
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backArrow: {
-    fontSize: 18,
-    color: Colors.text.primary,
-    fontWeight: '600',
   },
   content: {
     flex: 1,
