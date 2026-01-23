@@ -18,8 +18,8 @@ const getLocalHostUrl = () => {
 
 // Development API URL - Update this to match your backend
 export const API_BASE_URL = __DEV__ 
-  ? getLocalHostUrl()
-  : 'https://api.fashoma.com/api/v1';
+  ? 'https://fashoma-backend.vercel.app/api/v1'
+  : 'https://fashoma-backend.vercel.app/api/v1';
 
 export const API_TIMEOUT = 30000; // 30 seconds
 

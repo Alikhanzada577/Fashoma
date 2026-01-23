@@ -33,6 +33,10 @@ export interface ResetPasswordData {
   newPassword: string;
 }
 
+export interface GoogleLoginData {
+  idToken: string;
+}
+
 /**
  * Register a new user
  */
@@ -80,6 +84,32 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
     }
 
     throw new Error(response.data.message || 'Login failed');
+  } catch (error) {
+    throw new Error(parseApiError(error));
+  }
+};
+
+/**
+ * Google Login
+ */
+export const googleLogin = async (data: GoogleLoginData): Promise<AuthResponse> => {
+  try {
+    const response = await apiClient.post<ApiResponse<AuthResponse>>(
+      API_ENDPOINTS.AUTH.GOOGLE_AUTH,
+      data
+    );
+
+    if (response.data.success && response.data.data) {
+      const { user, tokens } = response.data.data;
+      
+      // Store tokens and user data
+      await storeTokens(tokens.accessToken, tokens.refreshToken);
+      await storeUserData(user);
+      
+      return response.data.data;
+    }
+
+    throw new Error(response.data.message || 'Google login failed');
   } catch (error) {
     throw new Error(parseApiError(error));
   }

@@ -1,12 +1,12 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, StatusBar } from 'react-native';
+import { StyleSheet, Text, View, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { PlayfairDisplay_400Regular_Italic, useFonts } from '@expo-google-fonts/playfair-display';
 import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 
-export default function DiscoverScreen() {
+export default function SavedScreen() {
   const [fontsLoaded] = useFonts({
     PlayfairDisplayItalic: PlayfairDisplay_400Regular_Italic,
     ManropeRegular: Manrope_400Regular,
@@ -20,29 +20,15 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Discover</Text>
+        <Text style={styles.headerTitle}>Saved</Text>
       </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color={Colors.text.light} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for styles, brands, or items..."
-            placeholderTextColor={Colors.text.light}
-          />
-        </View>
-      </View>
-
-      {/* Empty State */}
+      
       <View style={styles.content}>
         <View style={styles.emptyStateContainer}>
-          <Ionicons name="compass-outline" size={80} color={Colors.gray[300]} />
-          <Text style={styles.emptyStateTitle}>Start Exploring</Text>
+          <Ionicons name="bookmark-outline" size={80} color={Colors.gray[300]} />
+          <Text style={styles.emptyStateTitle}>No saved items yet</Text>
           <Text style={styles.emptyStateSubtitle}>
-            Discover curated fashion collections{'\n'}
-            and trending styles
+            Items you save will appear here
           </Text>
         </View>
       </View>
@@ -58,34 +44,12 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 24,
     backgroundColor: Colors.white,
   },
   headerTitle: {
     fontSize: 28,
     fontFamily: 'PlayfairDisplayItalic',
-    color: Colors.text.primary,
-  },
-  searchContainer: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray[200],
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.gray[100],
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'ManropeRegular',
     color: Colors.text.primary,
   },
   content: {
@@ -100,11 +64,11 @@ const styles = StyleSheet.create({
     marginBottom: 60,
   },
   emptyStateTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: 'PlayfairDisplayItalic',
     color: Colors.text.primary,
     marginTop: 24,
-    marginBottom: 12,
+    marginBottom: 8,
     textAlign: 'center',
   },
   emptyStateSubtitle: {
@@ -112,6 +76,5 @@ const styles = StyleSheet.create({
     fontFamily: 'ManropeRegular',
     color: Colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 22,
   },
 });

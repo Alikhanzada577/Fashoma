@@ -7,11 +7,13 @@ import { Manrope_400Regular } from '@expo-google-fonts/manrope';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Alert, Image, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { validateEmail } from '@/utils/validation';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GOOGLE_CONFIG } from '@/config/google.config';
 
 const BackButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.backButton} onPress={onPress} activeOpacity={0.7}>
@@ -24,16 +26,26 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
   const insets = useSafeAreaInsets();
 
-  const { login } = useAuth();
+  const { login, googleLogin } = useAuth();
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
     ManropeRegular: Manrope_400Regular,
     InterRegular: Inter_400Regular,
   });
+
+  // Configure Google Sign-In
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_CONFIG.webClientId,
+      offlineAccess: GOOGLE_CONFIG.offlineAccess,
+      scopes: [...GOOGLE_CONFIG.scopes],
+    });
+  }, []);
 
   if (!fontsLoaded) {
     return null;
@@ -82,8 +94,47 @@ export default function SignInScreen() {
     }
   };
 
-  const handleGoogleSignIn = () => {
-    Alert.alert('Coming Soon', 'Google Sign In will be available soon');
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    try {
+      // Check if Google Play Services are available (Android only)
+      await GoogleSignin.hasPlayServices();
+      
+      // Sign in with Google
+      const userInfo = await GoogleSignin.signIn();
+      
+      // Get the ID token
+      const idToken = userInfo.data?.idToken;
+      
+      if (!idToken) {
+        throw new Error('Failed to get Google ID token');
+      }
+      
+      // Send the ID token to your backend
+      await googleLogin(idToken);
+      
+    } catch (error: any) {
+      console.error('Google Sign-In Error:', error);
+      
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // User cancelled the login flow
+        Alert.alert('Cancelled', 'Google Sign-In was cancelled');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        // Sign in is in progress already
+        Alert.alert('In Progress', 'Sign in is already in progress');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        // Play services not available or outdated
+        Alert.alert('Error', 'Google Play Services not available');
+      } else {
+        // Other errors
+        Alert.alert(
+          'Google Sign-In Failed', 
+          error.message || 'An error occurred during Google Sign-In'
+        );
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   const handleForgotPassword = () => {
@@ -167,16 +218,23 @@ export default function SignInScreen() {
         </View>
         
         <TouchableOpacity 
-          style={styles.googleButton}
+          style={[styles.googleButton, isGoogleLoading && styles.googleButtonDisabled]}
           onPress={handleGoogleSignIn}
           activeOpacity={0.8}
+          disabled={isGoogleLoading || isLoading}
         >
-          <Image 
-            source={require('@/assets/images/Logo-google-icon-PNG.png')} 
-            style={styles.googleIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
+          {isGoogleLoading ? (
+            <ActivityIndicator size="small" color={Colors.text.primary} />
+          ) : (
+            <>
+              <Image 
+                source={require('@/assets/images/Logo-google-icon-PNG.png')} 
+                style={styles.googleIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
       
@@ -296,6 +354,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     marginBottom: 24,
     overflow: 'hidden',
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
   },
   googleIcon: {
     width: 20,

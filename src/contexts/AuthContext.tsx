@@ -25,6 +25,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  googleLogin: (idToken: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -68,6 +69,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login({ email, password });
+      setUser(response.user);
+      
+      // Navigate to main app
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
+  /**
+   * Google Login
+   */
+  const googleLogin = async (idToken: string) => {
+    try {
+      const response = await authService.googleLogin({ idToken });
       setUser(response.user);
       
       // Navigate to main app
@@ -130,6 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isLoading,
     isAuthenticated: !!user,
     login,
+    googleLogin,
     register,
     signOut,
     refreshUser,

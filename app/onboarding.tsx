@@ -66,9 +66,8 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   
   // Animation values
-  const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const buttonFadeAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayItalic: PlayfairDisplay_400Regular_Italic,
@@ -80,30 +79,23 @@ export default function OnboardingScreen() {
 
   // Animate content when step changes
   useEffect(() => {
-    // Reset and start animation
+    // Reset and start animation (slide from right - stack push effect)
+    slideAnim.setValue(400); // Start from off-screen right
     fadeAnim.setValue(0);
-    slideAnim.setValue(30);
-    buttonFadeAnim.setValue(0);
     
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 400,
+        duration: 300,
         useNativeDriver: true,
       }),
-      Animated.timing(buttonFadeAnim, {
+      Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
-        delay: 200,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [currentStep]);
+  }, [currentStep, slideAnim, fadeAnim]);
 
   if (!fontsLoaded) {
     return null;
@@ -111,26 +103,8 @@ export default function OnboardingScreen() {
 
   const handleNext = () => {
     if (currentStep < onboardingData.length - 1) {
-      // Fade out before changing step
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: -30,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonFadeAnim, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setCurrentStep(currentStep + 1);
-      });
+      // Just change step immediately - new content will slide in
+      setCurrentStep(currentStep + 1);
     } else {
       router.push('/auth/signin');
     }
@@ -154,7 +128,7 @@ export default function OnboardingScreen() {
           currentStep === 3 && styles.contentLeft,
           {
             opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
+            transform: [{ translateX: slideAnim }],
           },
         ]}
       >
@@ -290,7 +264,7 @@ export default function OnboardingScreen() {
         )}
       </Animated.View>
       
-      <Animated.View style={[styles.footer, { opacity: buttonFadeAnim }]}>
+      <View style={styles.footer}>
         <View style={styles.nextButtonShadow}>
           <Button 
             title={currentStep === onboardingData.length - 1 ? "GET STARTED" : "NEXT"} 
@@ -299,7 +273,7 @@ export default function OnboardingScreen() {
           />
         </View>
         <ProgressDots total={onboardingData.length} current={currentStep} />
-      </Animated.View>
+      </View>
     </SafeAreaView>
   );
 }

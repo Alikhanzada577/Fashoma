@@ -1,118 +1,88 @@
-import React, { useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, View, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, StatusBar, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from '@/components/ui/Button';
 import { Colors } from '@/constants/Colors';
 import { Typography } from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
-import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
-import { Manrope_400Regular } from '@expo-google-fonts/manrope';
+import { PlayfairDisplay_400Regular_Italic, useFonts } from '@expo-google-fonts/playfair-display';
+import { Manrope_400Regular, Manrope_500Medium } from '@expo-google-fonts/manrope';
+import { router } from 'expo-router';
 
 export default function HomeScreen() {
-  const { user, signOut, isLoading } = useAuth();
-  const [isSigningOut, setIsSigningOut] = useState(false);
+  const { user, isLoading } = useAuth();
 
   const [fontsLoaded] = useFonts({
-    PlayfairDisplayRegular: PlayfairDisplay_400Regular,
+    PlayfairDisplayItalic: PlayfairDisplay_400Regular_Italic,
     ManropeRegular: Manrope_400Regular,
+    ManropeMedium: Manrope_500Medium,
   });
+
+  // Get time-based greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
+  };
 
   if (!fontsLoaded || isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            setIsSigningOut(true);
-            try {
-              await signOut();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to logout');
-            } finally {
-              setIsSigningOut(false);
-            }
-          },
-        },
-      ]
-    );
-  };
+  const userName = user?.name?.split(' ')[0] || 'There';
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Ionicons name="checkmark-circle" size={60} color={Colors.primary} />
-          <Text style={styles.title}>Welcome to Fashoma!</Text>
-          
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.userName}>{userName}</Text>
         </View>
+        <TouchableOpacity 
+          style={styles.profileButton}
+          onPress={() => router.push('/(tabs)/settings')}
+        >
+          <Ionicons name="person-circle-outline" size={40} color={Colors.text.secondary} />
+        </TouchableOpacity>
+      </View>
 
-        {/* User Card */}
-        <View style={styles.userCard}>
-          <View style={styles.userIconContainer}>
-            <Ionicons name="person-circle-outline" size={50} color={Colors.primary} />
-          </View>
-          
-          <View style={styles.userInfo}>
-            <Text style={styles.label}>Name</Text>
-            <Text style={styles.value}>{user?.name || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.userInfo}>
-            <Text style={styles.label}>Email</Text>
-            <Text style={styles.valueSmall}>{user?.email || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.userInfo}>
-            <Text style={styles.label}>Provider</Text>
-            <Text style={styles.value}>{user?.authProvider || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.userInfo}>
-            <Text style={styles.label}>Status</Text>
-            <View style={styles.badgeContainer}>
-              <View style={[styles.badge, user?.isEmailVerified ? styles.badgeSuccess : styles.badgeWarning]}>
-                <Text style={styles.badgeText}>
-                  {user?.isEmailVerified ? 'Verified' : 'Not Verified'}
-                </Text>
-              </View>
+      {/* Main Content */}
+      <View style={styles.content}>
+        {/* Empty State Illustration */}
+        <View style={styles.emptyStateContainer}>
+          <View style={styles.illustrationContainer}>
+            {/* Clipboard illustrations using icons and shapes */}
+            <View style={[styles.clipboard, styles.clipboardBack]}>
+              <View style={styles.clipboardClip} />
+              <View style={styles.clipboardContent} />
+            </View>
+            <View style={[styles.clipboard, styles.clipboardFront]}>
+              <View style={styles.clipboardClip} />
+              <View style={styles.clipboardContent} />
             </View>
           </View>
-        </View>
 
-        {/* Logout Button */}
-        <View style={styles.buttonContainer}>
-          <Button 
-            title={isSigningOut ? 'Logging out...' : 'LOGOUT'} 
-            onPress={handleLogout}
-            variant="primary"
-            disabled={isSigningOut}
-          />
-        </View>
+          <Text style={styles.emptyStateTitle}>No recommendations yet</Text>
+          <Text style={styles.emptyStateSubtitle}>
+            Beauty emerges from the void.{'\n'}
+            Begin your curation to breathe life into this{'\n'}
+            space.
+          </Text>
 
-        {isSigningOut && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={Colors.primary} />
-          </View>
-        )}
+          {/* Initiate Curation Button */}
+          <TouchableOpacity style={styles.curationButton}>
+            <Text style={styles.curationButtonText}>Initiate Curation</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -121,99 +91,117 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.gray[50],
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
     backgroundColor: Colors.white,
+  },
+  greeting: {
+    fontSize: 28,
+    fontFamily: 'PlayfairDisplayItalic',
+    color: Colors.text.primary,
+    marginBottom: 2,
+  },
+  userName: {
+    fontSize: 16,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+  },
+  profileButton: {
+    padding: 4,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 20,
-  },
-  header: {
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingHorizontal: 32,
+    paddingBottom: 80,
   },
-  title: {
-    fontSize: Typography.fontSizes['2xl'],
-    fontWeight: '400',
-    fontFamily: 'PlayfairDisplayRegular',
-    color: Colors.text.primary,
-    marginTop: 12,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: Typography.fontSizes.sm,
-    fontFamily: 'ManropeRegular',
-    color: Colors.primary,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  userCard: {
-    backgroundColor: Colors.gray[50],
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-  },
-  userIconContainer: {
+  emptyStateContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    width: '100%',
+    marginBottom: 60,
   },
-  userInfo: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: Typography.fontSizes.xs,
-    fontFamily: 'ManropeRegular',
-    color: Colors.text.secondary,
-    marginBottom: 4,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  value: {
-    fontSize: Typography.fontSizes.base,
-    fontFamily: 'ManropeRegular',
-    color: Colors.text.primary,
-    fontWeight: '500',
-  },
-  valueSmall: {
-    fontSize: Typography.fontSizes.sm,
-    fontFamily: 'ManropeRegular',
-    color: Colors.text.primary,
-    fontWeight: '400',
-  },
-  badgeContainer: {
-    flexDirection: 'row',
-    marginTop: 4,
-  },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeSuccess: {
-    backgroundColor: '#10B981',
-  },
-  badgeWarning: {
-    backgroundColor: '#F59E0B',
-  },
-  badgeText: {
-    fontSize: Typography.fontSizes.xs,
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  buttonContainer: {
-    marginTop: 'auto',
-  },
-  loadingContainer: {
+  illustrationContainer: {
+    width: 200,
+    height: 180,
+    marginBottom: 32,
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: Typography.fontSizes.base,
-    color: Colors.text.secondary,
+  clipboard: {
+    position: 'absolute',
+    width: 120,
+    height: 140,
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: Colors.gray[300],
+  },
+  clipboardBack: {
+    transform: [{ rotate: '-15deg' }, { translateX: -20 }],
+    opacity: 0.6,
+  },
+  clipboardFront: {
+    transform: [{ rotate: '8deg' }, { translateX: 15 }],
+  },
+  clipboardClip: {
+    position: 'absolute',
+    top: -8,
+    left: '50%',
+    marginLeft: -20,
+    width: 40,
+    height: 16,
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+    opacity: 0.8,
+  },
+  clipboardContent: {
+    margin: 20,
+    marginTop: 28,
+    height: 80,
+    backgroundColor: Colors.gray[100],
+    borderRadius: 4,
+  },
+  emptyStateTitle: {
+    fontSize: 24,
+    fontFamily: 'PlayfairDisplayItalic',
+    color: Colors.text.primary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
     fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  curationButton: {
+    width: '100%',
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  curationButtonText: {
+    fontSize: 16,
+    fontFamily: 'ManropeMedium',
+    color: Colors.white,
+    fontWeight: '500',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
