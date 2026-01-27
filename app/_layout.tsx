@@ -53,6 +53,13 @@ export default function RootLayout() {
             }} 
           />
           <Stack.Screen 
+            name="avatar" 
+            options={{ 
+              headerShown: false,
+              animation: 'slide_from_right',
+            }} 
+          />
+          <Stack.Screen 
             name="modal" 
             options={{ 
               presentation: 'modal', 

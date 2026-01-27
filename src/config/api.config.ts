@@ -8,9 +8,8 @@ import { Platform } from 'react-native';
 // Get the correct localhost URL based on platform
 const getLocalHostUrl = () => {
   if (Platform.OS === 'android') {
-    // For Android emulator, use 10.0.2.2
-    // For physical Android device, replace with your computer's IP address
-    return 'http://10.0.2.2:5000/api/v1';
+   
+    return 'http://192.168.100.178:5000/api/v1';
   }
   // For iOS and web
   return 'http://localhost:5000/api/v1';
@@ -18,7 +17,7 @@ const getLocalHostUrl = () => {
 
 // Development API URL - Update this to match your backend
 export const API_BASE_URL = __DEV__ 
-  ? 'https://fashoma-backend.vercel.app/api/v1'
+  ? getLocalHostUrl()
   : 'https://fashoma-backend.vercel.app/api/v1';
 
 export const API_TIMEOUT = 30000; // 30 seconds
@@ -28,7 +27,7 @@ export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
-    GOOGLE_AUTH: '/auth/google',
+    GOOGLE_AUTH: '/auth/google/mobile',
     FORGOT_PASSWORD: '/auth/forgot-password',
     VERIFY_OTP: '/auth/verify-otp',
     RESET_PASSWORD: '/auth/reset-password',

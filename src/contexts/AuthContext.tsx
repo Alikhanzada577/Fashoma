@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { router } from 'expo-router';
 import * as authService from '@/services/auth.service';
 import { getUserData, clearAuthData } from '@/services/storage.service';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 interface User {
   id: string;
@@ -114,6 +115,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signOut = async () => {
     try {
       await authService.signOut();
+      
+      // Also sign out from Google to allow account selection on next sign-in
+      try {
+        await GoogleSignin.signOut();
+      } catch (googleError) {
+        // Ignore Google sign out errors (user might not have signed in with Google)
+        console.log('Google sign out skipped:', googleError);
+      }
+      
       setUser(null);
       
       // Navigate to sign in
@@ -123,6 +133,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Clear local state even if API call fails
       setUser(null);
       await clearAuthData();
+      
+      // Try to sign out from Google anyway
+      try {
+        await GoogleSignin.signOut();
+      } catch (googleError) {
+        // Ignore
+      }
+      
       router.replace('/auth/signin');
     }
   };

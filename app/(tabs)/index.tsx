@@ -79,7 +79,10 @@ export default function HomeScreen() {
           </Text>
 
           {/* Initiate Curation Button */}
-          <TouchableOpacity style={styles.curationButton}>
+          <TouchableOpacity 
+            style={styles.curationButton}
+            onPress={() => router.push('/avatar/create-twin')}
+          >
             <Text style={styles.curationButtonText}>Initiate Curation</Text>
           </TouchableOpacity>
         </View>
