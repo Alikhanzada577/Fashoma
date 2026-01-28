@@ -1,13 +1,16 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, StatusBar } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, StatusBar, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { PlayfairDisplay_400Regular_Italic, useFonts } from '@expo-google-fonts/playfair-display';
 import { Manrope_400Regular, Manrope_500Medium } from '@expo-google-fonts/manrope';
 import { router } from 'expo-router';
+import { useCameraPermissions } from 'expo-camera';
 
 export default function CameraPermissionScreen() {
+  const [permission, requestPermission] = useCameraPermissions();
+
   const [fontsLoaded] = useFonts({
     PlayfairDisplayItalic: PlayfairDisplay_400Regular_Italic,
     ManropeRegular: Manrope_400Regular,
@@ -18,10 +21,31 @@ export default function CameraPermissionScreen() {
     return null;
   }
 
-  const handleGrantAccess = () => {
-    // Request camera permission here
-    // Then navigate to choose method
-    router.push('/avatar/choose-method');
+  const handleGrantAccess = async () => {
+    // Request camera permission
+    const result = await requestPermission();
+    
+    if (result.granted) {
+      // Permission granted, navigate to choose method
+      router.push('/avatar/choose-method');
+    } else if (!result.canAskAgain) {
+      // Permission permanently denied, show alert to open settings
+      Alert.alert(
+        'Camera Permission Required',
+        'Camera access is required to create your digital twin. Please enable it in your device settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+    } else {
+      // Permission denied but can ask again
+      Alert.alert(
+        'Permission Denied',
+        'Camera access is needed to create your avatar. Please grant permission to continue.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleNotNow = () => {

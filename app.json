@@ -42,7 +42,19 @@
         }
       ],
       "expo-font",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Fashoma to access your camera to capture photos for your avatar."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Fashoma to access your photos to upload images for your avatar."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

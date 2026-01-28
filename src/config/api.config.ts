@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 const getLocalHostUrl = () => {
   if (Platform.OS === 'android') {
    
-    return 'http://192.168.100.178:5000/api/v1';
+    return 'http://192.168.100.15:5000/api/v1';
   }
   // For iOS and web
   return 'http://localhost:5000/api/v1';

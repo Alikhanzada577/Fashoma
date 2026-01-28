@@ -27,11 +27,14 @@ export default function ChooseMethodScreen() {
     
     // Navigate to capture screen based on method
     if (selectedMethod === '360') {
-      // router.push('/avatar/360-capture');
-      alert('360° Video Scan selected');
+      // 360° mode - use camera to capture 3 photos
+      router.push('/avatar/photo-capture');
     } else {
-      // router.push('/avatar/photo-capture');
-      alert('3 Photos selected');
+      // 3 Photos mode - upload from gallery
+      router.push({
+        pathname: '/avatar/photo-capture',
+        params: { mode: 'upload' },
+      });
     }
   };
 
