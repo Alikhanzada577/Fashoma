@@ -24,18 +24,8 @@ export default function ChooseMethodScreen() {
 
   const handleContinue = () => {
     if (!selectedMethod) return;
-    
-    // Navigate to capture screen based on method
-    if (selectedMethod === '360') {
-      // 360° mode - use camera to capture 3 photos
-      router.push('/avatar/photo-capture');
-    } else {
-      // 3 Photos mode - upload from gallery
-      router.push({
-        pathname: '/avatar/photo-capture',
-        params: { mode: 'upload' },
-      });
-    }
+    // Both methods go to the same photo-capture screen
+    router.push('/avatar/photo-capture');
   };
 
   return (
@@ -103,6 +93,20 @@ export default function ChooseMethodScreen() {
             <Text style={styles.detailsText}>
               Place phone on a surface and slowly{'\n'}
               turn 360° in front of it. Most accurate.
+            </Text>
+          </View>
+        )}
+
+        {/* 3 Photos Details Card */}
+        {selectedMethod === '3photos' && (
+          <View style={styles.detailsCard}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="camera" size={48} color={Colors.primary} />
+            </View>
+            <Text style={styles.detailsTitle}>3-Photo Capture</Text>
+            <Text style={styles.detailsText}>
+              Take three photos: Front, Side, and Back.{'\n'}
+              Good for quick setup.
             </Text>
           </View>
         )}
@@ -184,11 +188,16 @@ const styles = StyleSheet.create({
   },
   detailsCard: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 32,
     alignItems: 'center',
     flex: 1,
     marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   videoIconContainer: {
     width: 64,
@@ -198,6 +207,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
+  },
+  iconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.gray[200],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   detailsTitle: {
     fontSize: 20,

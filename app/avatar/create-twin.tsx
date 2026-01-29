@@ -44,7 +44,7 @@ export default function CreateTwinScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       
-      {/* Header: starts from top, back + Fashoma centered */}
+      
       <View style={[styles.headerSimple, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'PlayfairDisplayItalic',
+    fontFamily: 'ManropeMedium',
     color: Colors.text.primary,
   },
   content: {
