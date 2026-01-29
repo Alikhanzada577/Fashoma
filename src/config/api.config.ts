@@ -9,15 +9,15 @@ import { Platform } from 'react-native';
 const getLocalHostUrl = () => {
   if (Platform.OS === 'android') {
    
-    return 'http://192.168.100.15:5000/api/v1';
+    return 'http://192.168.100.187:5000/api/v1';
   }
   // For iOS and web
   return 'http://localhost:5000/api/v1';
 };
 
-// Development API URL - Update this to match your backend
+// Development API URL - Use getLocalHostUrl() for local backend, or live URL below
 export const API_BASE_URL = __DEV__ 
-  ? getLocalHostUrl()
+  ? 'https://fashoma-backend.vercel.app/api/v1'
   : 'https://fashoma-backend.vercel.app/api/v1';
 
 export const API_TIMEOUT = 30000; // 30 seconds

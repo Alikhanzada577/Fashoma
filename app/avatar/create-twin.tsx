@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { PlayfairDisplay_400Regular_Italic, useFonts } from '@expo-google-fonts/playfair-display';
@@ -16,6 +16,7 @@ const CAPTURE_OPTIONS = [
 
 export default function CreateTwinScreen() {
   const [selectedOptions, setSelectedOptions] = useState<number[]>([]);
+  const insets = useSafeAreaInsets();
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayItalic: PlayfairDisplay_400Regular_Italic,
@@ -40,14 +41,16 @@ export default function CreateTwinScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.gray[50]} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       
-      {/* Back Button Only */}
-      <View style={styles.headerSimple}>
+      {/* Header: starts from top, back + Fashoma centered */}
+      <View style={[styles.headerSimple, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Fashoma</Text>
+        <View style={styles.backButton} />
       </View>
 
       <ScrollView 
@@ -77,13 +80,14 @@ export default function CreateTwinScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.optionIcon}>
-                <Ionicons name={option.icon as any} size={24} color="#FFFFFF" />
+                <Ionicons name={option.icon as any} size={24} color={Colors.text.primary} />
               </View>
               <Text style={styles.optionText}>{option.title}</Text>
-              <View style={styles.checkmarkContainer}>
+              <View style={styles.cardEnd}>
                 {selectedOptions.includes(option.id) && (
-                  <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
+                  <Ionicons name="checkmark-circle" size={20} color={Colors.primary} style={styles.checkmark} />
                 )}
+                <View style={styles.greenDot} />
               </View>
             </TouchableOpacity>
           ))}
@@ -91,31 +95,38 @@ export default function CreateTwinScreen() {
 
         {/* Bottom Button - No container */}
         <TouchableOpacity
-          style={styles.startButton}
+          style={[styles.startButton, { marginBottom: 40 + insets.bottom }]}
           onPress={handleStartCapture}
           activeOpacity={0.8}
         >
           <Text style={styles.startButtonText}>Start Capture</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.gray[50],
+    backgroundColor: '#F5F7F6',
   },
   headerSimple: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 8,
     paddingBottom: 16,
-    backgroundColor: Colors.gray[50],
+    backgroundColor: Colors.white,
   },
   backButton: {
     padding: 4,
     width: 40,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontFamily: 'PlayfairDisplayItalic',
+    color: Colors.text.primary,
   },
   content: {
     flex: 1,
@@ -176,11 +187,19 @@ const styles = StyleSheet.create({
     fontFamily: 'ManropeRegular',
     color: Colors.text.primary,
   },
-  checkmarkContainer: {
-    width: 24,
-    height: 24,
+  cardEnd: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+  },
+  checkmark: {
+    marginRight: 4,
+  },
+  greenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary,
   },
   startButton: {
     backgroundColor: Colors.primary,
