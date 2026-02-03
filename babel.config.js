@@ -19,6 +19,7 @@ module.exports = function (api) {
             '@/contexts': path.resolve(__dirname, 'src/contexts'),
             '@/utils': path.resolve(__dirname, 'src/utils'),
             '@/config': path.resolve(__dirname, 'src/config'),
+            '@/data': path.resolve(__dirname, 'src/data'),
             // General alias last - only for imports that don't match above
             '@': path.resolve(__dirname, '.'),
           },

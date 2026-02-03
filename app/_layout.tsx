@@ -67,6 +67,14 @@ export default function RootLayout() {
               animation: 'slide_from_bottom',
             }} 
           />
+          <Stack.Screen 
+            name="try-on" 
+            options={{ 
+              headerShown: false,
+              animation: 'slide_from_bottom',
+              presentation: 'modal',
+            }} 
+          />
         </Stack>
         <StatusBar style="dark" />
       </ThemeProvider>

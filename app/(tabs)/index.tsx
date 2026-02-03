@@ -85,6 +85,15 @@ export default function HomeScreen() {
           >
             <Text style={styles.curationButtonText}>Initiate Curation</Text>
           </TouchableOpacity>
+
+          {/* Try On Button */}
+          <TouchableOpacity 
+            style={styles.tryOnButton}
+            onPress={() => router.push('/try-on')}
+          >
+            <Ionicons name="shirt-outline" size={20} color={Colors.primary} style={{ marginRight: 8 }} />
+            <Text style={styles.tryOnButtonText}>Try On Clothes</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -200,6 +209,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'ManropeMedium',
     color: Colors.white,
+    fontWeight: '500',
+  },
+  tryOnButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.white,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    marginTop: 12,
+  },
+  tryOnButtonText: {
+    fontSize: 16,
+    fontFamily: 'ManropeMedium',
+    color: Colors.primary,
     fontWeight: '500',
   },
   loadingContainer: {

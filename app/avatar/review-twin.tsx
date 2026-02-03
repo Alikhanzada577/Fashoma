@@ -43,14 +43,8 @@ export default function ReviewTwinScreen() {
   };
 
   const handleConfirmProfile = () => {
-    router.push({
-      pathname: '/avatar/edit-measurements',
-      params: {
-        frontPhoto: photos.front || '',
-        sidePhoto: photos.side || '',
-        backPhoto: photos.back || '',
-      },
-    });
+    // Go directly to complete - measurements are auto-detected
+    router.replace('/avatar/avatar-complete');
   };
 
   const handleRetakePhotos = () => {
@@ -58,14 +52,8 @@ export default function ReviewTwinScreen() {
   };
 
   const handleEdit = () => {
-    router.push({
-      pathname: '/avatar/edit-measurements',
-      params: {
-        frontPhoto: photos.front || '',
-        sidePhoto: photos.side || '',
-        backPhoto: photos.back || '',
-      },
-    });
+    // Go directly to complete - NO manual entry
+    router.replace('/avatar/avatar-complete');
   };
 
   const navigatePrevious = () => {

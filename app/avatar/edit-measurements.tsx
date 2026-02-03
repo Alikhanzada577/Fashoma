@@ -8,6 +8,7 @@ import {
   ScrollView,
   Dimensions,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ import { useFonts } from '@expo-google-fonts/playfair-display';
 import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
 import { router, useLocalSearchParams } from 'expo-router';
 import Slider from '@react-native-community/slider';
+import { storeAvatarMeasurements, storeAvatarPhoto, AvatarMeasurements } from '@/services/avatar.storage.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -84,8 +86,31 @@ export default function EditMeasurementsScreen() {
     }
   };
 
-  const handleSynchronize = () => {
-    router.push('/avatar/avatar-complete');
+  const handleSynchronize = async () => {
+    try {
+      // Convert measurements array to object for storage
+      const measurementsObj: AvatarMeasurements = {
+        shoulders: measurements.find(m => m.id === 'shoulders')?.value || 0,
+        chest: measurements.find(m => m.id === 'chest')?.value || 0,
+        waist: measurements.find(m => m.id === 'waist')?.value || 0,
+        hips: measurements.find(m => m.id === 'hips')?.value || 0,
+        inseam: measurements.find(m => m.id === 'inseam')?.value || 0,
+      };
+      
+      // Store measurements on device
+      await storeAvatarMeasurements(measurementsObj);
+      
+      // Store photo if available
+      if (frontPhoto) {
+        await storeAvatarPhoto(frontPhoto);
+      }
+      
+      // Navigate to completion screen
+      router.push('/avatar/avatar-complete');
+    } catch (error) {
+      console.error('Error saving measurements:', error);
+      Alert.alert('Error', 'Failed to save your measurements. Please try again.');
+    }
   };
 
   const upperMeasurements = measurements.filter(m => m.section === 'upper');

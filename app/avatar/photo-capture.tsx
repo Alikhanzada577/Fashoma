@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   Dimensions,
   Alert,
   Image,
+  Animated,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,46 +17,32 @@ import { useFonts } from '@expo-google-fonts/playfair-display';
 import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { PoseDetectorWebView, PoseDetectorRef } from '@/components/PoseDetection/PoseDetectorWebView';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-type CaptureStep = 'front' | 'side' | 'back';
-
-interface StepConfig {
-  title: string;
-  instruction: string;
-  step: number;
-}
-
-const STEPS: Record<CaptureStep, StepConfig> = {
-  front: {
-    title: 'Stand facing the camera',
-    instruction: 'Align your shoulders with the markers',
-    step: 1,
-  },
-  side: {
-    title: 'Turn to your side',
-    instruction: 'Align your hips with the markers',
-    step: 2,
-  },
-  back: {
-    title: 'Stand facing away',
-    instruction: 'Ensure your body is within the markers',
-    step: 3,
-  },
+// Single photo capture - only front T-pose needed
+const STEP_CONFIG = {
+  title: 'Strike a T-Pose',
+  instruction: 'Wait for green indicator, then capture',
 };
-
-const STEP_ORDER: CaptureStep[] = ['front', 'side', 'back'];
 
 export default function PhotoCaptureScreen() {
   const params = useLocalSearchParams<{ mode: string }>();
   const isUploadMode = params.mode === 'upload';
   
-  const [currentStep, setCurrentStep] = useState<CaptureStep>('front');
-  const [photos, setPhotos] = useState<{ [key in CaptureStep]?: string }>({});
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
+  
+  // Pose detection state
+  const [isPoseDetected, setIsPoseDetected] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [poseReady, setPoseReady] = useState(false);
+  const poseDetectorRef = useRef<PoseDetectorRef>(null);
+  const detectionInterval = useRef<NodeJS.Timeout | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const [fontsLoaded] = useFonts({
     ManropeRegular: Manrope_400Regular,
@@ -63,12 +50,85 @@ export default function PhotoCaptureScreen() {
     ManropeSemiBold: Manrope_600SemiBold,
   });
 
+  // Pulse animation for indicator
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
+  // Start real-time pose detection
+  const startRealtimeDetection = useCallback(() => {
+    if (detectionInterval.current) return;
+    
+    detectionInterval.current = setInterval(async () => {
+      if (!cameraRef.current || !poseDetectorRef.current || isDetecting || capturedPhoto) return;
+      
+      try {
+        setIsDetecting(true);
+        
+        // Take a quick snapshot
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.3, // Low quality for speed
+          skipProcessing: true,
+        });
+        
+        if (photo?.uri) {
+          // Detect pose in snapshot
+          const result = await poseDetectorRef.current.detectPose(photo.uri);
+          setIsPoseDetected(result.success && !!result.landmarks);
+        }
+      } catch (error) {
+        // Silently fail - don't spam errors
+      } finally {
+        setIsDetecting(false);
+      }
+    }, 2000); // Check every 2 seconds
+  }, [isDetecting, capturedPhoto]);
+
+  // Stop detection when component unmounts or photo is taken
+  useEffect(() => {
+    return () => {
+      if (detectionInterval.current) {
+        clearInterval(detectionInterval.current);
+        detectionInterval.current = null;
+      }
+    };
+  }, []);
+
+  // Start detection when pose detector is ready and camera is active
+  useEffect(() => {
+    if (poseReady && !isUploadMode && !capturedPhoto) {
+      startRealtimeDetection();
+    } else if (detectionInterval.current) {
+      clearInterval(detectionInterval.current);
+      detectionInterval.current = null;
+    }
+  }, [poseReady, isUploadMode, capturedPhoto, startRealtimeDetection]);
+
   useEffect(() => {
     if (isUploadMode) {
-      // For upload mode, open gallery immediately
       pickImage();
     }
   }, [isUploadMode]);
+
+  const handlePoseReady = () => {
+    console.log('Pose detector ready for real-time detection');
+    setPoseReady(true);
+  };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -84,32 +144,22 @@ export default function PhotoCaptureScreen() {
   };
 
   const handlePhotoTaken = (uri: string) => {
-    const newPhotos = { ...photos, [currentStep]: uri };
-    setPhotos(newPhotos);
-
-    // Move to next step or complete
-    const currentIndex = STEP_ORDER.indexOf(currentStep);
-    if (currentIndex < STEP_ORDER.length - 1) {
-      setCurrentStep(STEP_ORDER[currentIndex + 1]);
-      if (isUploadMode) {
-        // Small delay before opening gallery again
-        setTimeout(() => pickImage(), 500);
-      }
-    } else {
-      // All photos captured
-      handleComplete(newPhotos);
+    // Stop detection
+    if (detectionInterval.current) {
+      clearInterval(detectionInterval.current);
+      detectionInterval.current = null;
     }
+    
+    setCapturedPhoto(uri);
+    handleComplete(uri);
   };
 
-  const handleComplete = (capturedPhotos: { [key in CaptureStep]?: string }) => {
-    console.log('All photos captured:', capturedPhotos);
-    // Navigate to processing screen with photos
+  const handleComplete = (photoUri: string) => {
+    console.log('Photo captured:', photoUri);
     router.replace({
       pathname: '/avatar/processing',
       params: {
-        frontPhoto: capturedPhotos.front || '',
-        sidePhoto: capturedPhotos.side || '',
-        backPhoto: capturedPhotos.back || '',
+        frontPhoto: photoUri,
       },
     });
   };
@@ -132,9 +182,8 @@ export default function PhotoCaptureScreen() {
   };
 
   const retakePhoto = () => {
-    const newPhotos = { ...photos };
-    delete newPhotos[currentStep];
-    setPhotos(newPhotos);
+    setCapturedPhoto(null);
+    setIsPoseDetected(false);
   };
 
   const toggleCameraFacing = () => {
@@ -145,7 +194,6 @@ export default function PhotoCaptureScreen() {
     return null;
   }
 
-  // Handle permission not granted
   if (!permission) {
     return <View style={styles.container} />;
   }
@@ -163,78 +211,95 @@ export default function PhotoCaptureScreen() {
     );
   }
 
-  const stepConfig = STEPS[currentStep];
-  const hasCurrentPhoto = !!photos[currentStep];
+  const hasPhoto = !!capturedPhoto;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
+      {/* Hidden Pose Detector */}
+      <PoseDetectorWebView
+        ref={poseDetectorRef}
+        onReady={handlePoseReady}
+        onError={(error) => console.warn('Pose detector error:', error)}
+      />
+
       {/* Camera View or Photo Preview */}
-      {hasCurrentPhoto ? (
-        <Image source={{ uri: photos[currentStep] }} style={styles.camera} />
-      ) : isUploadMode ? (
-        <View style={[styles.camera, styles.uploadPlaceholder]}>
-          <Ionicons name="images-outline" size={64} color={Colors.white} />
-          <Text style={styles.uploadPlaceholderText}>Select {stepConfig.title}</Text>
-        </View>
-      ) : (
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={facing}
-        >
-          {/* Overlay UI */}
-          <View style={styles.overlay}>
+      <View style={styles.cameraContainer}>
+        {hasPhoto ? (
+          <Image source={{ uri: capturedPhoto }} style={styles.camera} />
+        ) : isUploadMode ? (
+          <View style={[styles.camera, styles.uploadPlaceholder]}>
+            <Ionicons name="images-outline" size={64} color={Colors.white} />
+            <Text style={styles.uploadPlaceholderText}>Select a T-Pose Photo</Text>
+          </View>
+        ) : (
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing={facing}
+          />
+        )}
+
+        {/* Overlay UI - positioned absolutely over camera */}
+        {!hasPhoto && !isUploadMode && (
+          <View style={styles.overlay} pointerEvents="box-none">
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                 <Ionicons name="chevron-back" size={28} color={Colors.white} />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>ALIGNMENT MODE</Text>
+              
+              {/* Pose Detection Indicator */}
+              <Animated.View 
+                style={[
+                  styles.poseIndicator,
+                  isPoseDetected ? styles.poseDetected : styles.poseNotDetected,
+                  { transform: [{ scale: isPoseDetected ? pulseAnim : 1 }] }
+                ]}
+              >
+                <Ionicons 
+                  name={isPoseDetected ? "checkmark-circle" : "scan-outline"} 
+                  size={20} 
+                  color={Colors.white} 
+                />
+                <Text style={styles.poseIndicatorText}>
+                  {isPoseDetected ? 'POSE DETECTED' : 'SCANNING...'}
+                </Text>
+              </Animated.View>
+              
               <TouchableOpacity style={styles.infoButton}>
                 <Ionicons name="information-circle-outline" size={24} color={Colors.white} />
               </TouchableOpacity>
             </View>
 
-            {/* Alignment Markers */}
-            <View style={styles.alignmentContainer}>
-              {/* Shoulder markers for front view */}
-              <View style={styles.shoulderMarkers}>
-                <View style={[styles.marker, styles.markerLeft]} />
-                <View style={[styles.marker, styles.markerRight]} />
-              </View>
-
-              {/* Body outline guide */}
-              <View style={styles.bodyGuide} />
+            {/* Body Guide */}
+            <View style={styles.alignmentContainer} pointerEvents="none">
+              <View style={[
+                styles.bodyGuide,
+                isPoseDetected && styles.bodyGuideDetected
+              ]} />
             </View>
 
             {/* Step Indicator */}
-            <View style={styles.stepIndicator}>
-              <Text style={styles.stepText}>STEP {stepConfig.step} OF 3</Text>
-              <Text style={styles.stepTitle}>{stepConfig.title}</Text>
-              
-              {/* Progress dots */}
-              <View style={styles.progressDots}>
-                {STEP_ORDER.map((step, index) => (
-                  <View
-                    key={step}
-                    style={[
-                      styles.progressDot,
-                      index <= STEP_ORDER.indexOf(currentStep) && styles.progressDotActive,
-                    ]}
-                  />
-                ))}
-              </View>
+            <View style={styles.stepIndicator} pointerEvents="none">
+              <Text style={styles.stepTitle}>{STEP_CONFIG.title}</Text>
             </View>
 
             {/* Instruction */}
-            <View style={styles.instructionContainer}>
-              <Text style={styles.instruction}>{stepConfig.instruction}</Text>
+            <View style={[
+              styles.instructionContainer,
+              isPoseDetected && styles.instructionContainerDetected
+            ]} pointerEvents="none">
+              <Text style={styles.instruction}>
+                {isPoseDetected 
+                  ? '✓ Great! Tap the button to capture' 
+                  : STEP_CONFIG.instruction}
+              </Text>
             </View>
           </View>
-        </CameraView>
-      )}
+        )}
+      </View>
 
       {/* Bottom Controls */}
       <View style={styles.controls}>
@@ -243,17 +308,23 @@ export default function PhotoCaptureScreen() {
           <Ionicons name="images-outline" size={28} color={Colors.white} />
         </TouchableOpacity>
 
-        {/* Shutter / Retake Button */}
-        {hasCurrentPhoto ? (
+        {/* Shutter Button */}
+        {hasPhoto ? (
           <TouchableOpacity style={styles.retakeButton} onPress={retakePhoto}>
             <Ionicons name="refresh" size={32} color={Colors.white} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={styles.shutterButton}
+            style={[
+              styles.shutterButton,
+              isPoseDetected && styles.shutterButtonReady
+            ]}
             onPress={isUploadMode ? pickImage : takePicture}
           >
-            <View style={styles.shutterInner} />
+            <View style={[
+              styles.shutterInner,
+              isPoseDetected && styles.shutterInnerReady
+            ]} />
           </TouchableOpacity>
         )}
 
@@ -262,7 +333,6 @@ export default function PhotoCaptureScreen() {
           <Ionicons name="camera-reverse-outline" size={28} color={Colors.white} />
         </TouchableOpacity>
       </View>
-
     </View>
   );
 }
@@ -272,13 +342,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a1a1a',
   },
+  cameraContainer: {
+    flex: 1,
+    position: 'relative',
+  },
   camera: {
     flex: 1,
     width: '100%',
   },
   overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   header: {
     flexDirection: 'row',
@@ -290,84 +364,71 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-  headerTitle: {
-    fontSize: 12,
-    fontFamily: 'ManropeSemiBold',
-    color: Colors.white,
-    letterSpacing: 1.5,
-  },
   infoButton: {
     padding: 8,
+  },
+  // Pose Indicator Styles
+  poseIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    gap: 6,
+  },
+  poseDetected: {
+    backgroundColor: 'rgba(34, 197, 94, 0.9)', // Green
+  },
+  poseNotDetected: {
+    backgroundColor: 'rgba(100, 100, 100, 0.8)', // Gray
+  },
+  poseIndicatorText: {
+    fontSize: 11,
+    fontFamily: 'ManropeSemiBold',
+    color: Colors.white,
+    letterSpacing: 0.5,
   },
   alignmentContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  shoulderMarkers: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: SCREEN_WIDTH * 0.6,
-    position: 'absolute',
-    top: '20%',
-  },
-  marker: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(100, 200, 150, 0.8)',
-  },
-  markerLeft: {},
-  markerRight: {},
   bodyGuide: {
-    width: SCREEN_WIDTH * 0.5,
-    height: SCREEN_HEIGHT * 0.5,
-    borderWidth: 2,
+    width: SCREEN_WIDTH * 0.55,
+    height: SCREEN_HEIGHT * 0.55,
+    borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 100,
+    borderRadius: 120,
     borderStyle: 'dashed',
+  },
+  bodyGuideDetected: {
+    borderColor: 'rgba(34, 197, 94, 0.7)', // Green when detected
+    borderStyle: 'solid',
   },
   stepIndicator: {
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  stepText: {
-    fontSize: 11,
-    fontFamily: 'ManropeMedium',
-    color: 'rgba(255,255,255,0.7)',
-    letterSpacing: 1,
-    marginBottom: 8,
+    marginBottom: 16,
   },
   stepTitle: {
     fontSize: 24,
     fontFamily: 'ManropeSemiBold',
     color: Colors.white,
-    marginBottom: 16,
-  },
-  progressDots: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  progressDot: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  progressDotActive: {
-    backgroundColor: Colors.white,
+    marginBottom: 8,
   },
   instructionContainer: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 14,
     paddingHorizontal: 24,
-    marginHorizontal: 40,
-    borderRadius: 8,
+    marginHorizontal: 32,
+    borderRadius: 12,
     marginBottom: 20,
   },
+  instructionContainerDetected: {
+    backgroundColor: 'rgba(34, 197, 94, 0.85)',
+  },
   instruction: {
-    fontSize: 14,
-    fontFamily: 'ManropeRegular',
+    fontSize: 15,
+    fontFamily: 'ManropeMedium',
     color: Colors.white,
     textAlign: 'center',
   },
@@ -398,11 +459,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  shutterButtonReady: {
+    borderColor: '#22C55E', // Green border when ready
+  },
   shutterInner: {
     width: 64,
     height: 64,
     borderRadius: 32,
     backgroundColor: Colors.white,
+  },
+  shutterInnerReady: {
+    backgroundColor: '#22C55E', // Green when ready
   },
   retakeButton: {
     width: 80,
