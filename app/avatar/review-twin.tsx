@@ -9,6 +9,7 @@ import {
   ScrollView,
   Dimensions,
   LayoutChangeEvent,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +19,7 @@ import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold } from '@exp
 import { router, useLocalSearchParams } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import EditableBodySilhouette from '@/components/Avatar/EditableBodySilhouette';
-import { getAvatarData, storeAvatarMeasurements, getAvatarSegmentationMask, storeAdjustedLandmarks, getAdjustedLandmarks, AvatarMeasurements } from '@/services/avatar.storage.service';
+import { getAvatarData, storeAvatarMeasurements, getAvatarSegmentationMask, storeAdjustedLandmarks, getAdjustedLandmarks, clearAvatarData, AvatarMeasurements } from '@/services/avatar.storage.service';
 import { BodyLandmarks } from '@/services/pose.service';
 import { BaseMeasurements } from '@/services/outlineCalculation.service';
 
@@ -46,6 +47,7 @@ export default function ReviewTwinScreen() {
   const params = useLocalSearchParams();
   const [selectedView, setSelectedView] = useState<PhotoView>('front');
   const [isEditMode, setIsEditMode] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [expandedMeasurement, setExpandedMeasurement] = useState<string | null>(null);
   
   // Avatar data state
@@ -209,7 +211,30 @@ export default function ReviewTwinScreen() {
   };
 
   const handleRetakePhotos = () => {
-    router.back();
+    Alert.alert(
+      'Retake Photos',
+      'This will delete your current measurements and photos. You\'ll need to take new photos to get new measurements.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete & Retake',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Clear all avatar data
+              await clearAvatarData();
+              // Navigate to the photo capture screen
+              router.replace('/avatar/create-twin');
+            } catch (error) {
+              console.error('Error clearing avatar data:', error);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleToggleEdit = () => {
@@ -262,7 +287,7 @@ export default function ReviewTwinScreen() {
           <Text style={styles.title}>Review Your Twin</Text>
           <Text style={styles.subtitle}>
             {isEditMode 
-              ? 'Drag the white points to adjust your body outline, or edit measurements below.'
+              ? 'Adjust your measurements using the sliders below.'
               : 'Verify your body scan details before proceeding.'}
           </Text>
         </View>
@@ -281,21 +306,21 @@ export default function ReviewTwinScreen() {
                   style={styles.mainPreviewImage} 
                   resizeMode="contain"
                 />
-                {/* Editable body silhouette with draggable landmark points */}
+                {/* Body silhouette - display only, not draggable */}
                 {shouldShowSilhouette && landmarks && (
-                  <View style={styles.outlineOverlayWrapper} pointerEvents={isEditMode ? 'auto' : 'none'}>
+                  <View style={styles.outlineOverlayWrapper} pointerEvents="none">
                     <EditableBodySilhouette
                       landmarks={landmarks}
                       onLandmarksChange={handleLandmarksChange}
                       width={Math.max(1, previewDimensions.width)}
                       height={Math.max(1, previewDimensions.height)}
                       imageAspectRatio={imageAspectRatio}
-                      editable={isEditMode}
+                      editable={false}
                       strokeColor="#FFFFFF"
                       strokeWidth={2.5}
                       fillColor="rgba(80, 120, 100, 0.3)"
                       handleColor="#FFFFFF"
-                      handleRadius={isEditMode ? 10 : 6}
+                      handleRadius={6}
                     />
                   </View>
                 )}
@@ -361,16 +386,10 @@ export default function ReviewTwinScreen() {
             <Text style={styles.measurementsTitle}>MEASUREMENTS</Text>
             
             {MEASUREMENT_CONFIG.map((item, index) => {
-              const isExpanded = isEditMode && expandedMeasurement === item.id;
               const value = currentMeasurements[item.id];
               
               return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.measurementItem}
-                  onPress={() => isEditMode && setExpandedMeasurement(isExpanded ? null : item.id)}
-                  activeOpacity={isEditMode ? 0.7 : 1}
-                >
+                <View key={item.id} style={styles.measurementItem}>
                   <View style={styles.measurementHeader}>
                     <View style={styles.measurementLabelContainer}>
                       <Text style={styles.measurementIndex}>0{index + 1}</Text>
@@ -381,8 +400,8 @@ export default function ReviewTwinScreen() {
                     </Text>
                   </View>
 
-                  {/* Slider for editing */}
-                  {isExpanded && (
+                  {/* Slider always visible in edit mode */}
+                  {isEditMode && (
                     <View style={styles.sliderContainer}>
                       <TouchableOpacity
                         style={styles.adjustButton}
@@ -399,7 +418,7 @@ export default function ReviewTwinScreen() {
                         onValueChange={(val) => handleMeasurementChange(item.id, val)}
                         minimumTrackTintColor={Colors.primary}
                         maximumTrackTintColor={Colors.gray[200]}
-                        thumbTintColor={Colors.white}
+                        thumbTintColor={Colors.primary}
                       />
 
                       <TouchableOpacity
@@ -410,7 +429,7 @@ export default function ReviewTwinScreen() {
                       </TouchableOpacity>
                     </View>
                   )}
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
