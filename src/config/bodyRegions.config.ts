@@ -92,6 +92,16 @@ export const GARMENT_REGION_MAP: Record<GarmentType, string[]> = {
 };
 
 /**
+ * Default colors for garment placeholders (fallback when no image available)
+ */
+export const GARMENT_COLORS: Record<GarmentType, string> = {
+  top: '#3C5F4E',      // Dark green
+  bottom: '#2C3E50',   // Dark blue
+  dress: '#8E44AD',    // Purple
+  outerwear: '#34495E', // Charcoal
+};
+
+/**
  * Get the primary measurement for scaling a garment type
  */
 export const getPrimaryMeasurement = (garmentType: GarmentType): 'chest' | 'hips' => {

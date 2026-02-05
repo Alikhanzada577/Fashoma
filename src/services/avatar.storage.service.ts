@@ -11,6 +11,8 @@ import { BodyLandmarks, BodyDimensions } from './pose.service';
 
 const STORAGE_KEYS = {
   AVATAR_DATA: '@fashoma_avatar_data',
+  AVATAR_SEGMENTATION_MASK: '@fashoma_avatar_segmentation_mask',
+  AVATAR_ADJUSTED_LANDMARKS: '@fashoma_avatar_adjusted_landmarks',
 } as const;
 
 export interface AvatarMeasurements {
@@ -193,14 +195,107 @@ export const hasAvatar = async (): Promise<boolean> => {
 };
 
 /**
+ * Store body segmentation mask (data URL) for overlay. Stored separately to keep main avatar JSON small.
+ */
+export const storeAvatarSegmentationMask = async (maskDataUrl: string | null): Promise<void> => {
+  try {
+    if (Platform.OS === 'web') {
+      if (maskDataUrl) {
+        localStorage.setItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK, maskDataUrl);
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK);
+      }
+    } else {
+      if (maskDataUrl) {
+        await AsyncStorage.setItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK, maskDataUrl);
+      } else {
+        await AsyncStorage.removeItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK);
+      }
+    }
+  } catch (error) {
+    console.error('Error storing segmentation mask:', error);
+  }
+};
+
+/**
+ * Get stored body segmentation mask data URL, if any.
+ */
+export const getAvatarSegmentationMask = async (): Promise<string | null> => {
+  try {
+    if (Platform.OS === 'web') {
+      return localStorage.getItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK);
+    }
+    return await AsyncStorage.getItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK);
+  } catch (error) {
+    console.error('Error getting segmentation mask:', error);
+    return null;
+  }
+};
+
+/**
+ * Store user-adjusted landmarks (separate from auto-detected ones).
+ * These are the landmarks after user has manually edited them.
+ */
+export const storeAdjustedLandmarks = async (landmarks: BodyLandmarks): Promise<void> => {
+  try {
+    const jsonData = JSON.stringify(landmarks);
+    if (Platform.OS === 'web') {
+      localStorage.setItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS, jsonData);
+    } else {
+      await AsyncStorage.setItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS, jsonData);
+    }
+    console.log('Adjusted landmarks stored successfully');
+  } catch (error) {
+    console.error('Error storing adjusted landmarks:', error);
+  }
+};
+
+/**
+ * Get user-adjusted landmarks. Returns null if user hasn't made adjustments.
+ */
+export const getAdjustedLandmarks = async (): Promise<BodyLandmarks | null> => {
+  try {
+    let jsonData: string | null;
+    if (Platform.OS === 'web') {
+      jsonData = localStorage.getItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS);
+    } else {
+      jsonData = await AsyncStorage.getItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS);
+    }
+    return jsonData ? JSON.parse(jsonData) : null;
+  } catch (error) {
+    console.error('Error getting adjusted landmarks:', error);
+    return null;
+  }
+};
+
+/**
+ * Clear user-adjusted landmarks (reset to auto-detected).
+ */
+export const clearAdjustedLandmarks = async (): Promise<void> => {
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS);
+    } else {
+      await AsyncStorage.removeItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS);
+    }
+  } catch (error) {
+    console.error('Error clearing adjusted landmarks:', error);
+  }
+};
+
+/**
  * Clear all avatar data from device
  */
 export const clearAvatarData = async (): Promise<void> => {
   try {
     if (Platform.OS === 'web') {
       localStorage.removeItem(STORAGE_KEYS.AVATAR_DATA);
+      localStorage.removeItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK);
+      localStorage.removeItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS);
     } else {
       await AsyncStorage.removeItem(STORAGE_KEYS.AVATAR_DATA);
+      await AsyncStorage.removeItem(STORAGE_KEYS.AVATAR_SEGMENTATION_MASK);
+      await AsyncStorage.removeItem(STORAGE_KEYS.AVATAR_ADJUSTED_LANDMARKS);
     }
     console.log('Avatar data cleared');
   } catch (error) {

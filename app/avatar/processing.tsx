@@ -25,7 +25,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PoseDetectorWebView, PoseDetectorRef } from '@/components/PoseDetection/PoseDetectorWebView';
-import { storeAvatarLandmarks, storeAvatarPhoto, storeAvatarMeasurements } from '@/services/avatar.storage.service';
+import { storeAvatarLandmarks, storeAvatarPhoto, storeAvatarMeasurements, storeAvatarSegmentationMask } from '@/services/avatar.storage.service';
 import { calculateMeasurementsFromLandmarks, validateMeasurements } from '@/services/measurementCalculation.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -135,11 +135,27 @@ export default function ProcessingScreen() {
       await storeAvatarLandmarks(result.landmarks, result.bodyDimensions);
       await storeAvatarMeasurements(measurements);
 
+      // Step 6: Body segmentation mask for outline overlay
+      setProcessingStatus('Creating body outline...');
+      try {
+        const maskDataUrl = await poseDetectorRef.current.getSegmentationMask(photoUri);
+        if (maskDataUrl) {
+          await storeAvatarSegmentationMask(maskDataUrl);
+        }
+      } catch (maskErr) {
+        console.warn('Segmentation mask failed (outline will use landmarks):', maskErr);
+      }
+
       setProcessingStatus('Avatar created successfully!');
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Navigate to completion (skip manual measurements screen)
-      router.replace('/avatar/avatar-complete');
+      // Navigate to review screen to show outline and allow measurement editing
+      router.replace({
+        pathname: '/avatar/review-twin',
+        params: {
+          frontPhoto: photoUri,
+        },
+      });
 
     } catch (error) {
       console.error('Error processing photo:', error);

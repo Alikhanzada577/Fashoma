@@ -1,210 +1,288 @@
 /**
- * Fit Service
+ * Fit Calculation Service
  * 
- * Compares user measurements against garment size chart to determine fit.
- * Returns Green / Amber / Red status with human-readable explanation.
- * 
- * All logic runs on device. No body data is sent anywhere.
+ * Compares user body measurements to product measurements
+ * to determine how well a garment will fit.
  */
 
 import { AvatarMeasurements } from './avatar.storage.service';
-import { SizeChart } from '@/data/mockProducts';
-import { GarmentType } from '@/config/bodyRegions.config';
+import { 
+  Product, 
+  ProductSize, 
+  FitStatus, 
+  FitAnalysis, 
+  FitRecommendation 
+} from '@/config/products.types';
 
-export type FitStatus = 'green' | 'amber' | 'red';
-
-export interface FitResult {
-  status: FitStatus;
-  title: string;
-  explanation: string;
-  details: FitDetail[];
-}
-
-export interface FitDetail {
-  measurement: string;
-  userValue: number;
-  garmentValue: number;
-  difference: number;
-  status: FitStatus;
-}
-
-// Tolerance thresholds in cm
-const THRESHOLDS = {
-  GREEN: 3,   // Within ±3cm = good fit
-  AMBER: 6,   // Within ±6cm = may feel snug or loose
-  // Beyond 6cm = poor fit (red)
+/**
+ * Tolerance thresholds for fit calculations (in cm)
+ * These define how much larger/smaller a garment should be than the body measurement
+ */
+const FIT_THRESHOLDS = {
+  // Shoulders: product should be 0-4cm wider than body for good fit
+  shoulders: {
+    tooTight: -1,    // Product is smaller than body
+    snug: 0,         // 0-2cm ease
+    goodFit: 2,      // 2-4cm ease (ideal)
+    relaxed: 4,      // 4-6cm ease
+    loose: 6,        // 6+ cm ease
+  },
+  // Chest: product should be 4-10cm wider than body for good fit
+  chest: {
+    tooTight: 2,     // Less than 2cm ease
+    snug: 4,         // 2-4cm ease
+    goodFit: 6,      // 4-8cm ease (ideal)
+    relaxed: 10,     // 8-12cm ease
+    loose: 14,       // 12+ cm ease
+  },
+  // Length: product vs torso length
+  length: {
+    tooTight: -2,    // Too short
+    snug: 0,         // Just covers
+    goodFit: 4,      // Slight coverage
+    relaxed: 8,      // Good coverage
+    loose: 12,       // Long/oversized
+  },
 };
 
 /**
- * Calculate fit for a specific measurement
+ * Calculate fit status based on difference between product and user measurement
  */
-const calculateMeasurementFit = (
-  measurementName: string,
-  userValue: number,
-  garmentValue: number
-): FitDetail => {
-  const difference = userValue - garmentValue;
-  const absDiff = Math.abs(difference);
+export const calculateFitStatus = (
+  measurementType: 'shoulders' | 'chest' | 'length',
+  difference: number
+): FitStatus => {
+  const thresholds = FIT_THRESHOLDS[measurementType];
   
-  let status: FitStatus;
-  if (absDiff <= THRESHOLDS.GREEN) {
-    status = 'green';
-  } else if (absDiff <= THRESHOLDS.AMBER) {
-    status = 'amber';
+  if (difference < thresholds.tooTight) {
+    return 'too_tight';
+  } else if (difference < thresholds.snug) {
+    return 'snug';
+  } else if (difference < thresholds.goodFit) {
+    return 'good_fit';
+  } else if (difference < thresholds.relaxed) {
+    return 'relaxed';
   } else {
-    status = 'red';
-  }
-  
-  return {
-    measurement: measurementName,
-    userValue,
-    garmentValue,
-    difference,
-    status,
-  };
-};
-
-/**
- * Get relevant measurements for a garment type
- */
-const getRelevantMeasurements = (garmentType: GarmentType): (keyof AvatarMeasurements)[] => {
-  switch (garmentType) {
-    case 'top':
-    case 'outerwear':
-      return ['chest', 'waist', 'shoulders'];
-    case 'bottom':
-      return ['hips', 'waist', 'inseam'];
-    case 'dress':
-      return ['chest', 'waist', 'hips'];
-    default:
-      return ['chest', 'waist'];
+    return 'loose';
   }
 };
 
 /**
- * Generate human-readable explanation based on fit details
+ * Get human-readable description for a fit status
  */
-const generateExplanation = (details: FitDetail[], garmentType: GarmentType): string => {
-  const issues: string[] = [];
-  const goodPoints: string[] = [];
+export const getFitDescription = (
+  measurementName: string,
+  status: FitStatus,
+  difference: number
+): string => {
+  const diffText = Math.abs(difference).toFixed(1);
   
-  details.forEach(detail => {
-    const name = detail.measurement.charAt(0).toUpperCase() + detail.measurement.slice(1);
-    
-    if (detail.status === 'green') {
-      goodPoints.push(name.toLowerCase());
-    } else if (detail.status === 'amber') {
-      if (detail.difference > 0) {
-        issues.push(`${name} may feel slightly snug`);
-      } else {
-        issues.push(`${name} may feel slightly loose`);
-      }
-    } else {
-      if (detail.difference > 0) {
-        issues.push(`${name} is likely too tight`);
-      } else {
-        issues.push(`${name} is likely too loose`);
-      }
-    }
-  });
-  
-  if (issues.length === 0 && goodPoints.length > 0) {
-    return `This size should fit well across ${goodPoints.join(', ')}.`;
-  } else if (issues.length > 0) {
-    return issues.join('. ') + '.';
-  }
-  
-  return 'Fit information unavailable.';
-};
-
-/**
- * Generate fit title based on status
- */
-const getFitTitle = (status: FitStatus): string => {
   switch (status) {
-    case 'green':
-      return 'Good Fit';
-    case 'amber':
-      return 'Consider Carefully';
-    case 'red':
-      return 'May Not Fit';
+    case 'too_tight':
+      return `${measurementName} may be too tight (${diffText}cm smaller than your body)`;
+    case 'snug':
+      return `${measurementName} will fit snugly (+${diffText}cm)`;
+    case 'good_fit':
+      return `${measurementName} will fit well (+${diffText}cm ease)`;
+    case 'relaxed':
+      return `${measurementName} will have a relaxed fit (+${diffText}cm)`;
+    case 'loose':
+      return `${measurementName} will be loose/oversized (+${diffText}cm)`;
+    default:
+      return `${measurementName}: ${diffText}cm difference`;
   }
 };
 
 /**
- * Calculate overall fit status from individual measurement statuses
+ * Get overall fit status from multiple analyses
  */
-const calculateOverallStatus = (details: FitDetail[]): FitStatus => {
-  if (details.some(d => d.status === 'red')) {
-    return 'red';
-  }
-  if (details.some(d => d.status === 'amber')) {
-    return 'amber';
-  }
-  return 'green';
-};
-
-/**
- * Main function: Calculate fit for a product and size
- */
-export const calculateFit = (
-  userMeasurements: AvatarMeasurements,
-  sizeChart: SizeChart,
-  selectedSize: string,
-  garmentType: GarmentType
-): FitResult => {
-  const sizeData = sizeChart[selectedSize];
-  
-  if (!sizeData) {
-    return {
-      status: 'amber',
-      title: 'Size Not Available',
-      explanation: 'Size chart data not available for this size.',
-      details: [],
-    };
+export const getOverallFitStatus = (analyses: FitAnalysis[]): FitStatus => {
+  // If any measurement is too tight, overall is too tight
+  if (analyses.some(a => a.status === 'too_tight')) {
+    return 'too_tight';
   }
   
-  const relevantMeasurements = getRelevantMeasurements(garmentType);
-  const details: FitDetail[] = [];
+  // Count each fit type
+  const counts = analyses.reduce((acc, a) => {
+    acc[a.status] = (acc[a.status] || 0) + 1;
+    return acc;
+  }, {} as Record<FitStatus, number>);
   
-  relevantMeasurements.forEach(measurementKey => {
-    const userValue = userMeasurements[measurementKey];
-    const garmentValue = sizeData[measurementKey];
-    
-    if (userValue && garmentValue) {
-      details.push(calculateMeasurementFit(measurementKey, userValue, garmentValue));
+  // Return the most common fit status
+  const statusOrder: FitStatus[] = ['good_fit', 'snug', 'relaxed', 'loose', 'too_tight'];
+  for (const status of statusOrder) {
+    if (counts[status] && counts[status] >= analyses.length / 2) {
+      return status;
     }
+  }
+  
+  // Default to good_fit if mixed
+  return 'good_fit';
+};
+
+/**
+ * Get recommendation message based on overall fit
+ */
+export const getRecommendationMessage = (
+  overallFit: FitStatus,
+  sizeLabel: string
+): string => {
+  switch (overallFit) {
+    case 'too_tight':
+      return `Size ${sizeLabel} may be too small for you. Consider sizing up.`;
+    case 'snug':
+      return `Size ${sizeLabel} will fit close to your body. Good for a fitted look.`;
+    case 'good_fit':
+      return `Size ${sizeLabel} is your recommended fit!`;
+    case 'relaxed':
+      return `Size ${sizeLabel} will have a comfortable, relaxed fit.`;
+    case 'loose':
+      return `Size ${sizeLabel} will be oversized. Size down for a closer fit.`;
+    default:
+      return `Size ${sizeLabel} should work for you.`;
+  }
+};
+
+/**
+ * Analyze how well a specific product size fits the user
+ */
+export const analyzeProductFit = (
+  userMeasurements: AvatarMeasurements,
+  productSize: ProductSize
+): FitRecommendation => {
+  const analyses: FitAnalysis[] = [];
+  
+  // Analyze shoulders
+  const shoulderDiff = productSize.shoulderWidth - userMeasurements.shoulders;
+  const shoulderStatus = calculateFitStatus('shoulders', shoulderDiff);
+  analyses.push({
+    measurement: 'Shoulders',
+    userValue: userMeasurements.shoulders,
+    productValue: productSize.shoulderWidth,
+    difference: shoulderDiff,
+    status: shoulderStatus,
+    description: getFitDescription('Shoulders', shoulderStatus, shoulderDiff),
   });
   
-  if (details.length === 0) {
-    return {
-      status: 'amber',
-      title: 'Limited Data',
-      explanation: 'Not enough measurement data to determine fit accurately.',
-      details: [],
-    };
-  }
+  // Analyze chest
+  const chestDiff = productSize.chestWidth - userMeasurements.chest;
+  const chestStatus = calculateFitStatus('chest', chestDiff);
+  analyses.push({
+    measurement: 'Chest',
+    userValue: userMeasurements.chest,
+    productValue: productSize.chestWidth,
+    difference: chestDiff,
+    status: chestStatus,
+    description: getFitDescription('Chest', chestStatus, chestDiff),
+  });
   
-  const overallStatus = calculateOverallStatus(details);
+  // Analyze length (comparing to a typical torso measurement)
+  // We'll use inseam as a proxy for height proportion
+  const estimatedTorsoLength = userMeasurements.chest * 0.8; // Rough estimate
+  const lengthDiff = productSize.length - estimatedTorsoLength;
+  const lengthStatus = calculateFitStatus('length', lengthDiff);
+  analyses.push({
+    measurement: 'Length',
+    userValue: estimatedTorsoLength,
+    productValue: productSize.length,
+    difference: lengthDiff,
+    status: lengthStatus,
+    description: getFitDescription('Length', lengthStatus, lengthDiff),
+  });
+  
+  // Calculate overall fit
+  const overallFit = getOverallFitStatus(analyses);
+  
+  // Calculate confidence based on how many measurements align
+  const goodFitCount = analyses.filter(a => 
+    a.status === 'good_fit' || a.status === 'snug' || a.status === 'relaxed'
+  ).length;
+  const confidence = Math.round((goodFitCount / analyses.length) * 100);
   
   return {
-    status: overallStatus,
-    title: getFitTitle(overallStatus),
-    explanation: generateExplanation(details, garmentType),
-    details,
+    size: productSize,
+    analyses,
+    overallFit,
+    recommendation: getRecommendationMessage(overallFit, productSize.label),
+    confidence,
   };
 };
 
 /**
- * Get color for fit status
+ * Find the best fitting size for a product
+ */
+export const findBestFittingSize = (
+  userMeasurements: AvatarMeasurements,
+  product: Product
+): FitRecommendation | null => {
+  if (!product.sizes.length) return null;
+  
+  const recommendations = product.sizes.map(size => 
+    analyzeProductFit(userMeasurements, size)
+  );
+  
+  // Find the size with "good_fit" overall status
+  const goodFit = recommendations.find(r => r.overallFit === 'good_fit');
+  if (goodFit) return goodFit;
+  
+  // Otherwise find the snug fit
+  const snugFit = recommendations.find(r => r.overallFit === 'snug');
+  if (snugFit) return snugFit;
+  
+  // Otherwise find relaxed fit
+  const relaxedFit = recommendations.find(r => r.overallFit === 'relaxed');
+  if (relaxedFit) return relaxedFit;
+  
+  // Return the first size if no good match
+  return recommendations[0];
+};
+
+/**
+ * Get all size recommendations for a product
+ */
+export const getAllSizeRecommendations = (
+  userMeasurements: AvatarMeasurements,
+  product: Product
+): FitRecommendation[] => {
+  return product.sizes.map(size => analyzeProductFit(userMeasurements, size));
+};
+
+/**
+ * Get fit status color for UI
  */
 export const getFitStatusColor = (status: FitStatus): string => {
   switch (status) {
-    case 'green':
-      return '#22C55E'; // Green
-    case 'amber':
-      return '#F59E0B'; // Amber/Orange
-    case 'red':
+    case 'too_tight':
       return '#EF4444'; // Red
+    case 'snug':
+      return '#F59E0B'; // Amber
+    case 'good_fit':
+      return '#22C55E'; // Green
+    case 'relaxed':
+      return '#3B82F6'; // Blue
+    case 'loose':
+      return '#8B5CF6'; // Purple
+    default:
+      return '#6B7280'; // Gray
+  }
+};
+
+/**
+ * Get fit status icon name (Ionicons)
+ */
+export const getFitStatusIcon = (status: FitStatus): string => {
+  switch (status) {
+    case 'too_tight':
+      return 'warning';
+    case 'snug':
+      return 'remove-circle';
+    case 'good_fit':
+      return 'checkmark-circle';
+    case 'relaxed':
+      return 'add-circle';
+    case 'loose':
+      return 'expand';
+    default:
+      return 'help-circle';
   }
 };

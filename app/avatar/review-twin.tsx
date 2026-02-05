@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   ScrollView,
   Dimensions,
+  LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,14 +16,49 @@ import { Colors } from '@/constants/Colors';
 import { PlayfairDisplay_400Regular, useFonts } from '@expo-google-fonts/playfair-display';
 import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold } from '@expo-google-fonts/manrope';
 import { router, useLocalSearchParams } from 'expo-router';
+import Slider from '@react-native-community/slider';
+import EditableBodySilhouette from '@/components/Avatar/EditableBodySilhouette';
+import { getAvatarData, storeAvatarMeasurements, getAvatarSegmentationMask, storeAdjustedLandmarks, getAdjustedLandmarks, AvatarMeasurements } from '@/services/avatar.storage.service';
+import { BodyLandmarks } from '@/services/pose.service';
+import { BaseMeasurements } from '@/services/outlineCalculation.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const PREVIEW_WIDTH = SCREEN_WIDTH - 64; // Account for padding
 
 type PhotoView = 'front' | 'back' | 'side';
+
+interface MeasurementItem {
+  id: keyof AvatarMeasurements;
+  label: string;
+  min: number;
+  max: number;
+}
+
+const MEASUREMENT_CONFIG: MeasurementItem[] = [
+  { id: 'shoulders', label: 'Shoulders', min: 30, max: 60 },
+  { id: 'chest', label: 'Chest', min: 70, max: 140 },
+  { id: 'waist', label: 'Waist', min: 50, max: 120 },
+  { id: 'hips', label: 'Hips', min: 70, max: 130 },
+  { id: 'inseam', label: 'Inseam', min: 60, max: 100 },
+];
 
 export default function ReviewTwinScreen() {
   const params = useLocalSearchParams();
   const [selectedView, setSelectedView] = useState<PhotoView>('front');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [expandedMeasurement, setExpandedMeasurement] = useState<string | null>(null);
+  
+  // Avatar data state
+  const [landmarks, setLandmarks] = useState<BodyLandmarks | null>(null);
+  const [baseMeasurements, setBaseMeasurements] = useState<BaseMeasurements | null>(null);
+  const [currentMeasurements, setCurrentMeasurements] = useState<AvatarMeasurements | null>(null);
+  const [segmentationMaskDataUrl, setSegmentationMaskDataUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [storedFrontPhoto, setStoredFrontPhoto] = useState<string | null>(null);
+  
+  // Image dimensions for overlay
+  const [previewDimensions, setPreviewDimensions] = useState({ width: PREVIEW_WIDTH, height: 360 });
+  const [imageAspectRatio, setImageAspectRatio] = useState(0.75); // Default 3:4 portrait
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
@@ -31,19 +67,144 @@ export default function ReviewTwinScreen() {
     ManropeSemiBold: Manrope_600SemiBold,
   });
 
+  // Load avatar data on mount
+  useEffect(() => {
+    loadAvatarData();
+  }, []);
+
+  // Get image dimensions to calculate aspect ratio
+  useEffect(() => {
+    const frontPhoto = params.frontPhoto as string;
+    if (frontPhoto) {
+      Image.getSize(
+        frontPhoto,
+        (width, height) => {
+          const ratio = width / height;
+          console.log('Image dimensions:', width, height, 'Aspect ratio:', ratio);
+          setImageAspectRatio(ratio);
+        },
+        (error) => {
+          console.warn('Failed to get image size:', error);
+          // Keep default 0.75 (3:4 portrait)
+        }
+      );
+    }
+  }, [params.frontPhoto]);
+
+  const loadAvatarData = async () => {
+    try {
+      setIsLoading(true);
+      const data = await getAvatarData();
+      
+      if (data) {
+        if (data.photoUri) setStoredFrontPhoto(data.photoUri);
+        
+        // Load adjusted landmarks if available, otherwise use original
+        const adjustedLandmarks = await getAdjustedLandmarks();
+        if (adjustedLandmarks) {
+          setLandmarks(adjustedLandmarks);
+        } else if (data.landmarks) {
+          setLandmarks(data.landmarks);
+        }
+        
+        if (data.measurements) {
+          setCurrentMeasurements(data.measurements);
+          setBaseMeasurements({
+            shoulders: data.measurements.shoulders,
+            chest: data.measurements.chest,
+            waist: data.measurements.waist,
+            hips: data.measurements.hips,
+            inseam: data.measurements.inseam,
+          });
+        }
+      }
+      const mask = await getAvatarSegmentationMask();
+      if (mask) setSegmentationMaskDataUrl(mask);
+    } catch (error) {
+      console.error('Error loading avatar data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle measurement change
+  const handleMeasurementChange = useCallback((id: keyof AvatarMeasurements, value: number) => {
+    setCurrentMeasurements(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [id]: Math.round(value * 10) / 10,
+      };
+    });
+  }, []);
+
+  // Increment/decrement handlers
+  const handleIncrement = useCallback((id: keyof AvatarMeasurements) => {
+    setCurrentMeasurements(prev => {
+      if (!prev) return prev;
+      const config = MEASUREMENT_CONFIG.find(m => m.id === id);
+      if (!config) return prev;
+      const newValue = Math.min(prev[id] + 0.5, config.max);
+      return { ...prev, [id]: Math.round(newValue * 10) / 10 };
+    });
+  }, []);
+
+  const handleDecrement = useCallback((id: keyof AvatarMeasurements) => {
+    setCurrentMeasurements(prev => {
+      if (!prev) return prev;
+      const config = MEASUREMENT_CONFIG.find(m => m.id === id);
+      if (!config) return prev;
+      const newValue = Math.max(prev[id] - 0.5, config.min);
+      return { ...prev, [id]: Math.round(newValue * 10) / 10 };
+    });
+  }, []);
+
+  // Save measurements
+  const handleSaveMeasurements = async () => {
+    if (currentMeasurements) {
+      try {
+        await storeAvatarMeasurements(currentMeasurements);
+        setIsEditMode(false);
+      } catch (error) {
+        console.error('Error saving measurements:', error);
+      }
+    }
+  };
+
+  // Handle preview layout to get dimensions (ensure non-zero for overlay)
+  const handlePreviewLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setPreviewDimensions({ width, height });
+    }
+  }, []);
+
+  // Handle landmark changes from the editable silhouette
+  const handleLandmarksChange = useCallback((newLandmarks: BodyLandmarks) => {
+    setLandmarks(newLandmarks);
+    // Save adjusted landmarks to storage
+    storeAdjustedLandmarks(newLandmarks);
+  }, []);
+
   if (!fontsLoaded) {
     return null;
   }
 
-  // Mock photos - in real app these would come from params
+  // Photos: prefer params, fallback to stored avatar photo for front
   const photos = {
-    front: params.frontPhoto as string,
+    front: (params.frontPhoto as string) || storedFrontPhoto,
     back: params.backPhoto as string,
     side: params.sidePhoto as string,
   };
 
-  const handleConfirmProfile = () => {
-    // Go directly to complete - measurements are auto-detected
+  // Show editable silhouette when on front view and we have landmarks
+  const shouldShowSilhouette = selectedView === 'front' && !!landmarks;
+
+  const handleConfirmProfile = async () => {
+    // Save measurements before navigating
+    if (currentMeasurements) {
+      await storeAvatarMeasurements(currentMeasurements);
+    }
     router.replace('/avatar/avatar-complete');
   };
 
@@ -51,22 +212,28 @@ export default function ReviewTwinScreen() {
     router.back();
   };
 
-  const handleEdit = () => {
-    // Go directly to complete - NO manual entry
-    router.replace('/avatar/avatar-complete');
+  const handleToggleEdit = () => {
+    if (isEditMode) {
+      // Save when exiting edit mode
+      handleSaveMeasurements();
+    } else {
+      setIsEditMode(true);
+    }
   };
 
   const navigatePrevious = () => {
-    const currentIndex = (['front', 'back', 'side'] as PhotoView[]).indexOf(selectedView);
+    const views: PhotoView[] = ['front', 'back', 'side'];
+    const currentIndex = views.indexOf(selectedView);
     if (currentIndex > 0) {
-      setSelectedView((['front', 'back', 'side'] as PhotoView[])[currentIndex - 1]);
+      setSelectedView(views[currentIndex - 1]);
     }
   };
 
   const navigateNext = () => {
-    const currentIndex = (['front', 'back', 'side'] as PhotoView[]).indexOf(selectedView);
+    const views: PhotoView[] = ['front', 'back', 'side'];
+    const currentIndex = views.indexOf(selectedView);
     if (currentIndex < 2) {
-      setSelectedView((['front', 'back', 'side'] as PhotoView[])[currentIndex + 1]);
+      setSelectedView(views[currentIndex + 1]);
     }
   };
 
@@ -81,10 +248,12 @@ export default function ReviewTwinScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerSpacer} />
-          <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
-            <Text style={styles.editText}>Edit</Text>
-            <Ionicons name="pencil" size={16} color={Colors.primary} />
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.editButton} onPress={handleToggleEdit}>
+            <Text style={styles.editText}>{isEditMode ? 'Done' : 'Edit'}</Text>
+            <Ionicons name={isEditMode ? 'checkmark' : 'pencil'} size={16} color={Colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -92,20 +261,45 @@ export default function ReviewTwinScreen() {
         <View style={styles.titleSection}>
           <Text style={styles.title}>Review Your Twin</Text>
           <Text style={styles.subtitle}>
-            Verify your body scan details before proceeding.
+            {isEditMode 
+              ? 'Drag the white points to adjust your body outline, or edit measurements below.'
+              : 'Verify your body scan details before proceeding.'}
           </Text>
         </View>
 
-        {/* 3D Avatar Preview */}
+        {/* Avatar Preview with Outline Overlay */}
         <View style={styles.avatarContainer}>
-          <View style={styles.avatarPreview}>
+          <View 
+            style={styles.avatarPreview}
+            onLayout={handlePreviewLayout}
+          >
             {/* Show selected photo */}
             {photos[selectedView] ? (
-              <Image 
-                source={{ uri: photos[selectedView] }} 
-                style={styles.mainPreviewImage} 
-                resizeMode="contain"
-              />
+              <>
+                <Image 
+                  source={{ uri: photos[selectedView] }} 
+                  style={styles.mainPreviewImage} 
+                  resizeMode="contain"
+                />
+                {/* Editable body silhouette with draggable landmark points */}
+                {shouldShowSilhouette && landmarks && (
+                  <View style={styles.outlineOverlayWrapper} pointerEvents={isEditMode ? 'auto' : 'none'}>
+                    <EditableBodySilhouette
+                      landmarks={landmarks}
+                      onLandmarksChange={handleLandmarksChange}
+                      width={Math.max(1, previewDimensions.width)}
+                      height={Math.max(1, previewDimensions.height)}
+                      imageAspectRatio={imageAspectRatio}
+                      editable={isEditMode}
+                      strokeColor="#FFFFFF"
+                      strokeWidth={2.5}
+                      fillColor="rgba(80, 120, 100, 0.3)"
+                      handleColor="#FFFFFF"
+                      handleRadius={isEditMode ? 10 : 6}
+                    />
+                  </View>
+                )}
+              </>
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <Ionicons name="body-outline" size={120} color={Colors.gray[400]} />
@@ -138,7 +332,10 @@ export default function ReviewTwinScreen() {
                 ]}
                 onPress={() => setSelectedView(view)}
               >
-                <View style={styles.thumbnailImageContainer}>
+                <View style={[
+                  styles.thumbnailImageContainer,
+                  selectedView === view && styles.thumbnailImageContainerSelected,
+                ]}>
                   {photos[view] ? (
                     <Image source={{ uri: photos[view] }} style={styles.thumbnailImage} />
                   ) : (
@@ -158,18 +355,81 @@ export default function ReviewTwinScreen() {
           </View>
         </View>
 
+        {/* Measurements Panel */}
+        {currentMeasurements && (
+          <View style={styles.measurementsContainer}>
+            <Text style={styles.measurementsTitle}>MEASUREMENTS</Text>
+            
+            {MEASUREMENT_CONFIG.map((item, index) => {
+              const isExpanded = isEditMode && expandedMeasurement === item.id;
+              const value = currentMeasurements[item.id];
+              
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.measurementItem}
+                  onPress={() => isEditMode && setExpandedMeasurement(isExpanded ? null : item.id)}
+                  activeOpacity={isEditMode ? 0.7 : 1}
+                >
+                  <View style={styles.measurementHeader}>
+                    <View style={styles.measurementLabelContainer}>
+                      <Text style={styles.measurementIndex}>0{index + 1}</Text>
+                      <Text style={styles.measurementLabel}>{item.label}</Text>
+                    </View>
+                    <Text style={styles.measurementValue}>
+                      {value.toFixed(1)} <Text style={styles.unitText}>CM</Text>
+                    </Text>
+                  </View>
+
+                  {/* Slider for editing */}
+                  {isExpanded && (
+                    <View style={styles.sliderContainer}>
+                      <TouchableOpacity
+                        style={styles.adjustButton}
+                        onPress={() => handleDecrement(item.id)}
+                      >
+                        <Ionicons name="remove" size={20} color={Colors.primary} />
+                      </TouchableOpacity>
+
+                      <Slider
+                        style={styles.slider}
+                        minimumValue={item.min}
+                        maximumValue={item.max}
+                        value={value}
+                        onValueChange={(val) => handleMeasurementChange(item.id, val)}
+                        minimumTrackTintColor={Colors.primary}
+                        maximumTrackTintColor={Colors.gray[200]}
+                        thumbTintColor={Colors.white}
+                      />
+
+                      <TouchableOpacity
+                        style={styles.adjustButton}
+                        onPress={() => handleIncrement(item.id)}
+                      >
+                        <Ionicons name="add" size={20} color={Colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
         {/* Confidence Score */}
-        <View style={styles.confidenceContainer}>
-          <View style={styles.confidenceContent}>
-            <View>
-              <Text style={styles.confidenceLabel}>CONFIDENCE SCORE</Text>
-              <Text style={styles.confidenceValue}>94% Match</Text>
-            </View>
-            <View style={styles.confidenceBadge}>
-              <Text style={styles.confidenceBadgeText}>94</Text>
+        {!isEditMode && (
+          <View style={styles.confidenceContainer}>
+            <View style={styles.confidenceContent}>
+              <View>
+                <Text style={styles.confidenceLabel}>CONFIDENCE SCORE</Text>
+                <Text style={styles.confidenceValue}>94% Match</Text>
+              </View>
+              <View style={styles.confidenceBadge}>
+                <Text style={styles.confidenceBadgeText}>94</Text>
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
@@ -178,7 +438,9 @@ export default function ReviewTwinScreen() {
             onPress={handleConfirmProfile}
             activeOpacity={0.8}
           >
-            <Text style={styles.confirmButtonText}>Confirm Profile</Text>
+            <Text style={styles.confirmButtonText}>
+              {isEditMode ? 'Save & Continue' : 'Confirm Profile'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -213,8 +475,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
-  headerSpacer: {
-    width: 60,
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   editButton: {
     flexDirection: 'row',
@@ -267,6 +532,16 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 12,
   },
+  outlineOverlayWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   navArrow: {
     position: 'absolute',
     width: 40,
@@ -305,6 +580,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
+  thumbnailImageContainerSelected: {
+    borderColor: Colors.primary,
+  },
   thumbnailImage: {
     width: '100%',
     height: '100%',
@@ -324,6 +602,75 @@ const styles = StyleSheet.create({
     fontFamily: 'ManropeMedium',
     color: Colors.text.primary,
   },
+  // Measurements Panel Styles
+  measurementsContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  measurementsTitle: {
+    fontSize: 12,
+    fontFamily: 'ManropeSemiBold',
+    color: Colors.text.secondary,
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  measurementItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray[100],
+  },
+  measurementHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  measurementLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  measurementIndex: {
+    fontSize: 11,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+  },
+  measurementLabel: {
+    fontSize: 16,
+    fontFamily: 'ManropeMedium',
+    color: Colors.text.primary,
+  },
+  measurementValue: {
+    fontSize: 18,
+    fontFamily: 'ManropeSemiBold',
+    color: Colors.text.primary,
+  },
+  unitText: {
+    fontSize: 12,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+  },
+  sliderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 8,
+  },
+  adjustButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slider: {
+    flex: 1,
+    height: 40,
+  },
+  // Confidence Score Styles
   confidenceContainer: {
     backgroundColor: Colors.white,
     borderRadius: 12,

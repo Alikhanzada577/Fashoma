@@ -44,6 +44,7 @@ export interface PoseDetectionResult {
 
 export interface PoseDetectorRef {
   detectPose: (imageUri: string) => Promise<PoseDetectionResult>;
+  getSegmentationMask: (imageUri: string) => Promise<string | null>;
 }
 
 interface PoseDetectorWebViewProps {
@@ -60,6 +61,7 @@ const getMediaPipeHTML = () => `
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/selfie_segmentation.js" crossorigin="anonymous"></script>
   <style>
     body { margin: 0; padding: 0; background: #f0f0f0; }
     #canvas { display: none; }
@@ -69,11 +71,16 @@ const getMediaPipeHTML = () => `
 <body>
   <div id="status">Loading MediaPipe...</div>
   <canvas id="canvas"></canvas>
+  <canvas id="maskCanvas" style="display:none"></canvas>
   <img id="image" style="display:none" crossorigin="anonymous">
+  <img id="segImage" style="display:none" crossorigin="anonymous">
   
   <script>
     let pose = null;
+    let selfieSegmentation = null;
     let isReady = false;
+    let segmentationReady = false;
+    let pendingSegmentationResolve = null;
     
     // Initialize MediaPipe Pose
     async function initPose() {
@@ -106,6 +113,7 @@ const getMediaPipeHTML = () => `
         isReady = true;
         document.getElementById('status').innerText = 'Ready';
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+        initSelfieSegmentation().catch(function(e) { console.warn('Segmentation init failed:', e); });
       } catch (error) {
         document.getElementById('status').innerText = 'Error: ' + error.message;
         window.ReactNativeWebView.postMessage(JSON.stringify({ 
@@ -114,6 +122,98 @@ const getMediaPipeHTML = () => `
         }));
       }
     }
+    
+    async function initSelfieSegmentation() {
+      if (typeof SelfieSegmentation === 'undefined') {
+        console.warn('SelfieSegmentation not loaded');
+        return;
+      }
+      selfieSegmentation = new SelfieSegmentation({
+        locateFile: (file) => 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/' + file
+      });
+      selfieSegmentation.setOptions({ modelSelection: 0 });
+      selfieSegmentation.onResults(onSegmentationResults);
+      const canvas = document.getElementById('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 100, 100);
+      await selfieSegmentation.send({ image: canvas });
+      segmentationReady = true;
+    }
+    
+    function onSegmentationResults(results) {
+      if (!pendingSegmentationResolve) return;
+      try {
+        const mask = results.segmentationMask;
+        if (!mask || !mask.width) {
+          pendingSegmentationResolve(null);
+          pendingSegmentationResolve = null;
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segmentationResult', success: false }));
+          return;
+        }
+        const maskCanvas = document.getElementById('maskCanvas');
+        maskCanvas.width = mask.width;
+        maskCanvas.height = mask.height;
+        const ctx = maskCanvas.getContext('2d');
+        ctx.drawImage(mask, 0, 0);
+        const imgData = ctx.getImageData(0, 0, mask.width, mask.height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const g = data[i + 1];
+          if (g > 128) {
+            data[i] = 255;
+            data[i + 1] = 255;
+            data[i + 2] = 255;
+            data[i + 3] = 220;
+          } else {
+            data[i + 3] = 0;
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        const maskDataUrl = maskCanvas.toDataURL('image/png');
+        pendingSegmentationResolve(maskDataUrl);
+        pendingSegmentationResolve = null;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segmentationResult', success: true, maskDataUrl: maskDataUrl }));
+      } catch (e) {
+        console.log('Segmentation result error: ' + e.message);
+        pendingSegmentationResolve(null);
+        pendingSegmentationResolve = null;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segmentationResult', success: false }));
+      }
+    }
+    
+    window.runSegmentation = function(imageDataUrl) {
+      return new Promise((resolve) => {
+        if (!segmentationReady || !selfieSegmentation) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segmentationResult', success: false }));
+          return;
+        }
+        pendingSegmentationResolve = resolve;
+        const img = document.getElementById('segImage');
+        img.onload = async () => {
+          try {
+            const canvas = document.getElementById('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            await selfieSegmentation.send({ image: canvas });
+          } catch (e) {
+            pendingSegmentationResolve(null);
+            pendingSegmentationResolve = null;
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segmentationResult', success: false }));
+          }
+        };
+        img.onerror = () => {
+          pendingSegmentationResolve(null);
+          pendingSegmentationResolve = null;
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segmentationResult', success: false }));
+        };
+        img.src = imageDataUrl;
+      });
+    };
     
     let currentResolve = null;
     
@@ -243,8 +343,31 @@ export const PoseDetectorWebView = forwardRef<PoseDetectorRef, PoseDetectorWebVi
     const webViewRef = useRef<WebView>(null);
     const [isReady, setIsReady] = useState(false);
     const pendingResolveRef = useRef<((result: PoseDetectionResult) => void) | null>(null);
+    const pendingSegmentationResolveRef = useRef<((maskDataUrl: string | null) => void) | null>(null);
 
     useImperativeHandle(ref, () => ({
+      getSegmentationMask: async (imageUri: string): Promise<string | null> => {
+        if (!isReady) return null;
+        try {
+          const dataUrl = await uriToBase64(imageUri);
+          if (!dataUrl?.startsWith('data:')) return null;
+          return new Promise((resolve) => {
+            pendingSegmentationResolveRef.current = resolve;
+            const escaped = JSON.stringify(dataUrl);
+            webViewRef.current?.injectJavaScript(
+              `(function(){ runSegmentation(${escaped}); })(); true;`
+            );
+            setTimeout(() => {
+              if (pendingSegmentationResolveRef.current === resolve) {
+                pendingSegmentationResolveRef.current = null;
+                resolve(null);
+              }
+            }, 15000);
+          });
+        } catch {
+          return null;
+        }
+      },
       detectPose: async (imageUri: string): Promise<PoseDetectionResult> => {
         if (!isReady) {
           return {
@@ -334,6 +457,13 @@ export const PoseDetectorWebView = forwardRef<PoseDetectorRef, PoseDetectorWebVi
               });
             }
             pendingResolveRef.current = null;
+          }
+        } else if (data.type === 'segmentationResult') {
+          if (pendingSegmentationResolveRef.current) {
+            pendingSegmentationResolveRef.current(
+              data.success && data.maskDataUrl ? data.maskDataUrl : null
+            );
+            pendingSegmentationResolveRef.current = null;
           }
         }
       } catch (error) {

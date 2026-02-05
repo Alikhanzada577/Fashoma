@@ -1,11 +1,11 @@
 /**
  * Try-On Screen
  * 
- * 2.5D virtual try-on using T-pose approach.
- * Shows: avatar with garment overlay, size selector, fit feedback.
+ * Virtual try-on that overlays garments on the user's body photo.
+ * Shows: category tabs, product info, garment overlay on user photo, size selector.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,6 +14,9 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
+  Image,
+  Dimensions,
+  ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,16 +27,54 @@ import { router } from 'expo-router';
 
 import { TryOnRenderer } from '@/components/TryOn/TryOnRenderer';
 import { 
-  getAvatarMeasurements, 
-  getAvatarLandmarks, 
-  getAvatarBodyDimensions,
   getAvatarData,
+  getAdjustedLandmarks,
   AvatarMeasurements, 
   hasAvatar 
 } from '@/services/avatar.storage.service';
 import { BodyLandmarks, BodyDimensions } from '@/services/pose.service';
-import { calculateFit, getFitStatusColor, FitResult } from '@/services/fit.service';
-import { MOCK_PRODUCTS, MockProduct } from '@/data/mockProducts';
+import { GarmentType, GARMENT_COLORS } from '@/config/bodyRegions.config';
+import { SizeChart } from '@/data/mockProducts';
+import { Product, ProductSize, ImageSource } from '@/config/products.types';
+import { getAllProducts, getProductSize, LOCAL_PRODUCT_IMAGES } from '@/config/products.mock';
+import { 
+  analyzeProductFit, 
+  getAllSizeRecommendations,
+  getFitStatusColor,
+} from '@/services/fit.service';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Category type
+type CategoryType = 'tshirt' | 'pants';
+
+// Convert Product sizes to SizeChart format for TryOnRenderer
+const productSizesToSizeChart = (sizes: ProductSize[]): SizeChart => {
+  const chart: SizeChart = {};
+  sizes.forEach(size => {
+    chart[size.label] = {
+      chest: size.chestWidth,
+      shoulders: size.shoulderWidth,
+      length: size.length,
+      sleeves: size.sleeveLength,
+      waist: size.waistWidth,
+      hips: size.hipWidth,
+      inseam: size.inseam,
+    };
+  });
+  return chart;
+};
+
+/**
+ * Helper to convert ImageSource to ImageSourcePropType
+ */
+const getImageSource = (source: ImageSource | undefined | null): ImageSourcePropType | undefined => {
+  if (!source) return undefined;
+  if (typeof source === 'number') {
+    return source as ImageSourcePropType;
+  }
+  return { uri: source };
+};
 
 export default function TryOnScreen() {
   const [isLoading, setIsLoading] = useState(true);
@@ -45,15 +86,42 @@ export default function TryOnScreen() {
   const [landmarks, setLandmarks] = useState<BodyLandmarks | null>(null);
   const [bodyDimensions, setBodyDimensions] = useState<BodyDimensions | null>(null);
   
-  // Product selection (for demo, show both products)
+  // Category selection
+  const [selectedCategory, setSelectedCategory] = useState<CategoryType>('tshirt');
+  
+  // Products from mock data
+  const allProducts = getAllProducts();
+  
+  // Filter products by category
+  const products = useMemo(() => 
+    allProducts.filter(p => p.type === selectedCategory),
+    [allProducts, selectedCategory]
+  );
+  
+  // Product selection
   const [selectedProductIndex, setSelectedProductIndex] = useState(0);
-  const selectedProduct: MockProduct = MOCK_PRODUCTS[selectedProductIndex];
+  const selectedProduct: Product | undefined = products[selectedProductIndex];
   
   // Size selection
-  const [selectedSize, setSelectedSize] = useState(selectedProduct.availableSizes[2]); // Default to M
+  const [selectedSizeLabel, setSelectedSizeLabel] = useState<string>('M');
   
-  // Fit result
-  const [fitResult, setFitResult] = useState<FitResult | null>(null);
+  // Get selected size object
+  const selectedSize: ProductSize | undefined = useMemo(() => 
+    selectedProduct ? getProductSize(selectedProduct, selectedSizeLabel) : undefined,
+    [selectedProduct, selectedSizeLabel]
+  );
+
+  // Convert to SizeChart for TryOnRenderer
+  const sizeChart: SizeChart = useMemo(() => 
+    selectedProduct ? productSizesToSizeChart(selectedProduct.sizes) : {},
+    [selectedProduct]
+  );
+
+  // Get all size recommendations
+  const allSizeRecommendations = useMemo(() => {
+    if (!userMeasurements || !selectedProduct) return [];
+    return getAllSizeRecommendations(userMeasurements, selectedProduct);
+  }, [userMeasurements, selectedProduct]);
 
   const [fontsLoaded] = useFonts({
     ManropeRegular: Manrope_400Regular,
@@ -69,19 +137,19 @@ export default function TryOnScreen() {
       setHasAvatarData(avatarExists);
       
       if (avatarExists) {
-        // Load all avatar data including landmarks
         const avatarData = await getAvatarData();
-        console.log('Loaded avatar data:', {
-          hasPhoto: !!avatarData?.photoUri,
-          hasLandmarks: !!avatarData?.landmarks,
-          hasBodyDimensions: !!avatarData?.bodyDimensions,
-          measurements: avatarData?.measurements,
-        });
         if (avatarData) {
           setUserMeasurements(avatarData.measurements);
           setUserPhotoUri(avatarData.photoUri);
-          setLandmarks(avatarData.landmarks);
           setBodyDimensions(avatarData.bodyDimensions);
+          
+          // Prefer adjusted landmarks if available
+          const adjustedLandmarks = await getAdjustedLandmarks();
+          if (adjustedLandmarks) {
+            setLandmarks(adjustedLandmarks);
+          } else if (avatarData.landmarks) {
+            setLandmarks(avatarData.landmarks);
+          }
         }
       }
       setIsLoading(false);
@@ -89,23 +157,18 @@ export default function TryOnScreen() {
     loadData();
   }, []);
 
-  // Calculate fit when measurements, product, or size changes
+  // Reset product selection when category changes
   useEffect(() => {
-    if (userMeasurements && selectedProduct) {
-      const result = calculateFit(
-        userMeasurements,
-        selectedProduct.sizeChart,
-        selectedSize,
-        selectedProduct.garmentType
-      );
-      setFitResult(result);
-    }
-  }, [userMeasurements, selectedProduct, selectedSize]);
+    setSelectedProductIndex(0);
+  }, [selectedCategory]);
 
   // Reset size when product changes
   useEffect(() => {
-    setSelectedSize(selectedProduct.availableSizes[2] || selectedProduct.availableSizes[0]);
-  }, [selectedProductIndex]);
+    if (selectedProduct) {
+      const middleIndex = Math.floor(selectedProduct.sizes.length / 2);
+      setSelectedSizeLabel(selectedProduct.sizes[middleIndex]?.label || 'M');
+    }
+  }, [selectedProductIndex, selectedProduct]);
 
   if (!fontsLoaded) {
     return null;
@@ -160,6 +223,9 @@ export default function TryOnScreen() {
     );
   }
 
+  // Get garment type for TryOnRenderer
+  const garmentType: GarmentType = selectedCategory === 'tshirt' ? 'top' : 'bottom';
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.gray[50]} />
@@ -178,161 +244,181 @@ export default function TryOnScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Product Selector (Toggle between T-shirt and Pants) */}
-        <View style={styles.productSelector}>
-          {MOCK_PRODUCTS.map((product, index) => (
-            <TouchableOpacity
-              key={product.id}
-              style={[
-                styles.productTab,
-                selectedProductIndex === index && styles.productTabActive,
-              ]}
-              onPress={() => setSelectedProductIndex(index)}
-            >
-              <Ionicons
-                name={product.garmentType === 'top' ? 'shirt-outline' : 'resize-outline'}
-                size={20}
-                color={selectedProductIndex === index ? Colors.white : Colors.text.secondary}
-              />
-              <Text
-                style={[
-                  styles.productTabText,
-                  selectedProductIndex === index && styles.productTabTextActive,
-                ]}
-              >
-                {product.garmentType === 'top' ? 'T-Shirt' : 'Pants'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        {/* Category Tabs */}
+        <View style={styles.categoryTabs}>
+          <TouchableOpacity
+            style={[
+              styles.categoryTab,
+              selectedCategory === 'tshirt' && styles.categoryTabActive,
+            ]}
+            onPress={() => setSelectedCategory('tshirt')}
+          >
+            <Ionicons 
+              name="shirt-outline" 
+              size={18} 
+              color={selectedCategory === 'tshirt' ? Colors.white : Colors.text.primary} 
+            />
+            <Text style={[
+              styles.categoryTabText,
+              selectedCategory === 'tshirt' && styles.categoryTabTextActive,
+            ]}>
+              T-Shirt
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.categoryTab,
+              selectedCategory === 'pants' && styles.categoryTabActive,
+            ]}
+            onPress={() => setSelectedCategory('pants')}
+          >
+            <Ionicons 
+              name="resize-outline" 
+              size={18} 
+              color={selectedCategory === 'pants' ? Colors.white : Colors.text.primary} 
+            />
+            <Text style={[
+              styles.categoryTabText,
+              selectedCategory === 'pants' && styles.categoryTabTextActive,
+            ]}>
+              Pants
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Product Info */}
-        <View style={styles.productInfo}>
-          <Text style={styles.productName}>{selectedProduct.name}</Text>
-          <Text style={styles.productBrand}>{selectedProduct.brand}</Text>
-        </View>
-
-        {/* 2.5D Renderer */}
-        <View style={styles.rendererContainer}>
-          <TryOnRenderer
-            userMeasurements={userMeasurements}
-            garmentType={selectedProduct.garmentType}
-            selectedSize={selectedSize}
-            sizeChart={selectedProduct.sizeChart}
-            garmentImage={selectedProduct.garmentImage}
-            garmentColor={selectedProduct.placeholderColor}
-            userPhotoUri={userPhotoUri}
-            landmarks={landmarks}
-            bodyDimensions={bodyDimensions}
-          />
-        </View>
-
-        {/* Size Selector */}
-        <View style={styles.sizeSection}>
-          <Text style={styles.sectionTitle}>SELECT SIZE</Text>
-          <View style={styles.sizeSelector}>
-            {selectedProduct.availableSizes.map((size) => (
-              <TouchableOpacity
-                key={size}
-                style={[
-                  styles.sizeButton,
-                  selectedSize === size && styles.sizeButtonActive,
-                ]}
-                onPress={() => setSelectedSize(size)}
-              >
-                <Text
-                  style={[
-                    styles.sizeButtonText,
-                    selectedSize === size && styles.sizeButtonTextActive,
-                  ]}
-                >
-                  {size}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Fit Feedback */}
-        {fitResult && (
-          <View style={styles.fitSection}>
-            <View
-              style={[
-                styles.fitBadge,
-                { backgroundColor: getFitStatusColor(fitResult.status) + '20' },
-              ]}
-            >
-              <View
-                style={[
-                  styles.fitDot,
-                  { backgroundColor: getFitStatusColor(fitResult.status) },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.fitTitle,
-                  { color: getFitStatusColor(fitResult.status) },
-                ]}
-              >
-                {fitResult.title}
-              </Text>
-            </View>
-            <Text style={styles.fitExplanation}>{fitResult.explanation}</Text>
-
-            {/* Measurement Details */}
-            {fitResult.details.length > 0 && (
-              <View style={styles.detailsContainer}>
-                {fitResult.details.map((detail) => (
-                  <View key={detail.measurement} style={styles.detailRow}>
-                    <View style={styles.detailLeft}>
-                      <View
-                        style={[
-                          styles.detailDot,
-                          { backgroundColor: getFitStatusColor(detail.status) },
-                        ]}
-                      />
-                      <Text style={styles.detailLabel}>
-                        {detail.measurement.charAt(0).toUpperCase() + detail.measurement.slice(1)}
-                      </Text>
-                    </View>
-                    <Text style={styles.detailValue}>
-                      You: {detail.userValue}cm / Size: {detail.garmentValue}cm
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
+        {selectedProduct && (
+          <View style={styles.productInfo}>
+            <Text style={styles.productName}>{selectedProduct.name}</Text>
+            <Text style={styles.productBrand}>{selectedProduct.brand}</Text>
           </View>
         )}
 
-        {/* Your Measurements Reference - Auto-detected from pose */}
-        <View style={styles.measurementsRef}>
-          <View style={styles.measurementsRefHeader}>
-            <Text style={styles.measurementsRefTitle}>Your Measurements</Text>
-            <Text style={styles.measurementsRefBadge}>AUTO-DETECTED</Text>
+        {/* Try-On Renderer - Garment on User Photo */}
+        {selectedProduct && (
+          <View style={styles.rendererContainer}>
+            <TryOnRenderer
+              userMeasurements={userMeasurements}
+              garmentType={garmentType}
+              selectedSize={selectedSizeLabel}
+              sizeChart={sizeChart}
+              garmentImage={getImageSource(selectedProduct.imageUrl)}
+              garmentColor={GARMENT_COLORS[garmentType]}
+              userPhotoUri={userPhotoUri}
+              landmarks={landmarks}
+              bodyDimensions={bodyDimensions}
+            />
           </View>
-          <View style={styles.measurementsRefRow}>
-            <Text style={styles.measurementsRefItem}>
-              Shoulders: {userMeasurements.shoulders}cm
-            </Text>
-            <Text style={styles.measurementsRefItem}>
-              Chest: {userMeasurements.chest}cm
-            </Text>
+        )}
+
+        {/* Size Selector */}
+        {selectedProduct && (
+          <View style={styles.sizeSection}>
+            <Text style={styles.sectionTitle}>SELECT SIZE</Text>
+            <View style={styles.sizeSelector}>
+              {selectedProduct.sizes.map((size) => {
+                const recommendation = allSizeRecommendations.find(
+                  r => r.size.label === size.label
+                );
+                const fitColor = recommendation 
+                  ? getFitStatusColor(recommendation.overallFit) 
+                  : Colors.gray[400];
+                const isSelected = selectedSizeLabel === size.label;
+                
+                return (
+                  <TouchableOpacity
+                    key={size.label}
+                    style={[
+                      styles.sizeButton,
+                      isSelected && styles.sizeButtonActive,
+                      isSelected && { borderColor: fitColor },
+                    ]}
+                    onPress={() => setSelectedSizeLabel(size.label)}
+                  >
+                    <Text
+                      style={[
+                        styles.sizeButtonText,
+                        isSelected && styles.sizeButtonTextActive,
+                      ]}
+                    >
+                      {size.label}
+                    </Text>
+                    {recommendation && (
+                      <View 
+                        style={[
+                          styles.sizeFitDot,
+                          { backgroundColor: fitColor }
+                        ]} 
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            
+            {/* Size Legend */}
+            <View style={styles.sizeLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: getFitStatusColor('good_fit') }]} />
+                <Text style={styles.legendText}>Good Fit</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: getFitStatusColor('snug') }]} />
+                <Text style={styles.legendText}>Snug</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: getFitStatusColor('too_tight') }]} />
+                <Text style={styles.legendText}>Too Tight</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: getFitStatusColor('loose') }]} />
+                <Text style={styles.legendText}>Loose</Text>
+              </View>
+            </View>
           </View>
-          <View style={styles.measurementsRefRow}>
-            <Text style={styles.measurementsRefItem}>
-              Waist: {userMeasurements.waist}cm
-            </Text>
-            <Text style={styles.measurementsRefItem}>
-              Hips: {userMeasurements.hips}cm
-            </Text>
+        )}
+
+        {/* Product Carousel (if multiple products) */}
+        {products.length > 1 && (
+          <View style={styles.productCarousel}>
+            <Text style={styles.sectionTitle}>MORE OPTIONS</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.productScrollContent}
+            >
+              {products.map((product, index) => (
+                <TouchableOpacity
+                  key={product.id}
+                  style={[
+                    styles.productCard,
+                    selectedProductIndex === index && styles.productCardActive,
+                  ]}
+                  onPress={() => setSelectedProductIndex(index)}
+                >
+                  <Image
+                    source={getImageSource(product.imageUrl)}
+                    style={styles.productCardImage}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.productCardName} numberOfLines={1}>
+                    {product.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
-          <View style={styles.measurementsRefRow}>
-            <Text style={styles.measurementsRefItem}>
-              Inseam: {userMeasurements.inseam}cm
-            </Text>
-          </View>
-        </View>
+        )}
+
+        {/* Edit Avatar Link */}
+        <TouchableOpacity 
+          style={styles.editAvatarButton}
+          onPress={() => router.push('/avatar/review-twin')}
+        >
+          <Ionicons name="pencil" size={16} color={Colors.primary} />
+          <Text style={styles.editAvatarText}>Edit your measurements</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -379,42 +465,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
-  // Product selector
-  productSelector: {
+  // Category Tabs
+  categoryTabs: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  productTab: {
+  categoryTab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: Colors.white,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.gray[200],
   },
-  productTabActive: {
+  categoryTabActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  productTabText: {
-    fontSize: 14,
+  categoryTabText: {
+    fontSize: 15,
     fontFamily: 'ManropeMedium',
-    color: Colors.text.secondary,
+    color: Colors.text.primary,
   },
-  productTabTextActive: {
+  categoryTabTextActive: {
     color: Colors.white,
   },
-  // Product info
+  // Product Info
   productInfo: {
     marginBottom: 16,
   },
   productName: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: 'ManropeSemiBold',
     color: Colors.text.primary,
     marginBottom: 4,
@@ -429,7 +515,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  // Size selector
+  // Size Section
   sizeSection: {
     marginBottom: 24,
   },
@@ -451,12 +537,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.white,
     borderRadius: 10,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: Colors.gray[200],
+    position: 'relative',
   },
   sizeButtonActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: Colors.gray[50],
   },
   sizeButtonText: {
     fontSize: 15,
@@ -464,109 +550,79 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
   },
   sizeButtonTextActive: {
-    color: Colors.white,
+    color: Colors.text.primary,
   },
-  // Fit section
-  fitSection: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-  },
-  fitBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
-  fitDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 8,
-  },
-  fitTitle: {
-    fontSize: 15,
-    fontFamily: 'ManropeSemiBold',
-  },
-  fitExplanation: {
-    fontSize: 14,
-    fontFamily: 'ManropeRegular',
-    color: Colors.text.secondary,
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  detailsContainer: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray[100],
-    paddingTop: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  detailLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  detailDot: {
+  sizeFitDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 10,
   },
-  detailLabel: {
-    fontSize: 14,
+  sizeLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginTop: 12,
+    justifyContent: 'center',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+  },
+  // Product Carousel
+  productCarousel: {
+    marginBottom: 24,
+  },
+  productScrollContent: {
+    gap: 12,
+  },
+  productCard: {
+    width: 100,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  productCardActive: {
+    borderColor: Colors.primary,
+  },
+  productCardImage: {
+    width: '100%',
+    height: 80,
+    backgroundColor: Colors.gray[100],
+  },
+  productCardName: {
+    fontSize: 11,
     fontFamily: 'ManropeMedium',
     color: Colors.text.primary,
+    padding: 8,
   },
-  detailValue: {
-    fontSize: 12,
-    fontFamily: 'ManropeRegular',
-    color: Colors.text.secondary,
-  },
-  // Measurements reference
-  measurementsRef: {
-    backgroundColor: Colors.gray[100],
-    borderRadius: 12,
-    padding: 16,
-  },
-  measurementsRefHeader: {
+  // Edit Avatar
+  editAvatarButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
   },
-  measurementsRefTitle: {
-    fontSize: 12,
-    fontFamily: 'ManropeSemiBold',
-    color: Colors.text.secondary,
-    letterSpacing: 0.5,
-  },
-  measurementsRefBadge: {
-    fontSize: 9,
-    fontFamily: 'ManropeSemiBold',
+  editAvatarText: {
+    fontSize: 14,
+    fontFamily: 'ManropeMedium',
     color: Colors.primary,
-    backgroundColor: Colors.primary + '20',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    letterSpacing: 0.5,
-  },
-  measurementsRefRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  measurementsRefItem: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'ManropeRegular',
-    color: Colors.text.primary,
   },
   // No avatar state
   noAvatarContainer: {
