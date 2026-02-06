@@ -92,7 +92,11 @@ const calculateGarmentPosition = (
       
       return { left, top, width: garmentWidth, height: garmentHeight };
     } else {
-      // Pants
+      // Pants alignment (all coordinates normalized 0–1):
+      // - TOP of pants (waistband) = leftHip.y & rightHip.y (average)  → hipY
+      // - BOTTOM of pants (hem)    = leftAnkle.y & rightAnkle.y       → ankleY
+      // - HORIZONTAL center        = (leftHip.x + rightHip.x) / 2     → hipCenterX
+      // - WIDTH                    = from leftHip.x to rightHip.x     → detectedHipWidth
       const { leftHip, rightHip, leftAnkle, rightAnkle } = landmarks;
       
       const hipCenterX = (leftHip.x + rightHip.x) / 2;
@@ -103,15 +107,22 @@ const calculateGarmentPosition = (
       
       let scaleX = 1;
       if (sizeData?.hips && userMeasurements.hips) {
-        scaleX = Math.max(0.8, Math.min(1.2, userMeasurements.hips / sizeData.hips));
+        scaleX = Math.max(0.85, Math.min(1.15, userMeasurements.hips / sizeData.hips));
       }
       
-      // Ensure minimum dimensions for visibility
-      const garmentWidth = Math.max((detectedHipWidth * 3) * RENDERER_WIDTH * scaleX, RENDERER_WIDTH * 0.4);
-      const garmentHeight = Math.max((ankleY - hipY + 0.08) * RENDERER_HEIGHT, RENDERER_HEIGHT * 0.45);
+      // Width: based on hip width
+      const garmentWidth = Math.max(
+        detectedHipWidth * 1.9 * RENDERER_WIDTH * scaleX,
+        RENDERER_WIDTH * 0.4
+      );
+      
+      // Height: hip to ankle + extra length (e.g. break on shoe / slight drape)
+      const extraLengthNorm = 0.04; // ~4% of frame below ankle
+      const legLengthNorm = (ankleY - hipY) + extraLengthNorm;
+      const garmentHeight = legLengthNorm * RENDERER_HEIGHT;
       
       const left = (hipCenterX * RENDERER_WIDTH) - (garmentWidth / 2);
-      const top = (hipY - 0.03) * RENDERER_HEIGHT;
+      const top = hipY * RENDERER_HEIGHT;
       
       return { left, top, width: garmentWidth, height: garmentHeight };
     }

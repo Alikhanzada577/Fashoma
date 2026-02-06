@@ -11,6 +11,8 @@ import { Product, ProductSize } from './products.types';
 export const LOCAL_PRODUCT_IMAGES = {
   tshirtFront: require('@/assets/Product/Tshirt-front-photo.png'),
   tshirtBack: require('@/assets/Product/T_Shirt_Design_backpng.png'),
+  pantsFront: require('@/assets/Product/frontPant-png.png'),
+  pantsBack: require('@/assets/Product/backpant-.png'),
 };
 
 /**
@@ -131,6 +133,48 @@ const RELAXED_FIT_SIZES: ProductSize[] = [
 ];
 
 /**
+ * Standard pants sizes with realistic measurements (in cm)
+ * Based on typical men's pants sizing
+ */
+const STANDARD_PANTS_SIZES: ProductSize[] = [
+  { 
+    label: 'S', 
+    waistWidth: 76, 
+    hipWidth: 96, 
+    inseam: 76, 
+    length: 102 
+  },
+  { 
+    label: 'M', 
+    waistWidth: 81, 
+    hipWidth: 101, 
+    inseam: 78, 
+    length: 104 
+  },
+  { 
+    label: 'L', 
+    waistWidth: 86, 
+    hipWidth: 106, 
+    inseam: 80, 
+    length: 106 
+  },
+  { 
+    label: 'XL', 
+    waistWidth: 91, 
+    hipWidth: 111, 
+    inseam: 82, 
+    length: 108 
+  },
+  { 
+    label: 'XXL', 
+    waistWidth: 96, 
+    hipWidth: 116, 
+    inseam: 84, 
+    length: 110 
+  },
+];
+
+/**
  * Mock product database
  */
 export const MOCK_PRODUCTS: Product[] = [
@@ -199,6 +243,20 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 32.99,
     color: 'Faded Green',
     material: '100% Cotton (Pre-washed)',
+  },
+  // Pants Products
+  {
+    id: 'pants-001',
+    name: 'Classic Fit Chinos',
+    type: 'pants',
+    brand: 'Fashoma Basics',
+    description: 'Comfortable classic fit chinos perfect for casual and semi-formal occasions.',
+    imageUrl: LOCAL_PRODUCT_IMAGES.pantsFront,
+    backImageUrl: LOCAL_PRODUCT_IMAGES.pantsBack,
+    sizes: STANDARD_PANTS_SIZES,
+    price: 49.99,
+    color: 'Grey',
+    material: '98% Cotton, 2% Elastane',
   },
 ];
 
