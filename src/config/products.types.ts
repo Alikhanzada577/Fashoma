@@ -53,8 +53,10 @@ export interface Product {
   brand: string;
   /** Product description */
   description: string;
-  /** Main product image - can be local (require) or remote URL */
+  /** Main product image (front view) - can be local (require) or remote URL */
   imageUrl: ImageSource;
+  /** Back view product image (optional) */
+  backImageUrl?: ImageSource;
   /** Additional product images */
   additionalImages?: ImageSource[];
   /** Available sizes with measurements */

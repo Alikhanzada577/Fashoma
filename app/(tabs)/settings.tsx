@@ -8,6 +8,7 @@ import { PlayfairDisplay_400Regular_Italic, useFonts } from '@expo-google-fonts/
 import { Manrope_400Regular, Manrope_500Medium } from '@expo-google-fonts/manrope';
 import { router } from 'expo-router';
 import { hasAvatar, clearAvatarData } from '@/services/avatar.storage.service';
+import { deleteAvatarMetadataFromBackend } from '@/services/avatar.api.service';
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();
@@ -55,8 +56,18 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Clear local data
               await clearAvatarData();
               setHasAvatarData(false);
+              
+              // Also delete from backend (non-blocking)
+              try {
+                await deleteAvatarMetadataFromBackend();
+                console.log('Avatar metadata deleted from backend');
+              } catch (backendError) {
+                console.warn('Backend delete failed (local data cleared):', backendError);
+              }
+              
               // Navigate to create avatar flow
               router.push('/avatar/create-twin');
             } catch (error) {

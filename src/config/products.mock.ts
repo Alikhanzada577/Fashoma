@@ -10,6 +10,7 @@ import { Product, ProductSize } from './products.types';
 // Local product images
 export const LOCAL_PRODUCT_IMAGES = {
   tshirtFront: require('@/assets/Product/Tshirt-front-photo.png'),
+  tshirtBack: require('@/assets/Product/T_Shirt_Design_backpng.png'),
 };
 
 /**
@@ -140,6 +141,7 @@ export const MOCK_PRODUCTS: Product[] = [
     brand: 'Fashoma Basics',
     description: 'A timeless cotton t-shirt with a comfortable regular fit. Perfect for everyday wear.',
     imageUrl: LOCAL_PRODUCT_IMAGES.tshirtFront,
+    backImageUrl: LOCAL_PRODUCT_IMAGES.tshirtBack,
     sizes: STANDARD_SHIRT_SIZES,
     price: 29.99,
     color: 'Black/Maroon',

@@ -20,27 +20,28 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import EditableBodySilhouette from '@/components/Avatar/EditableBodySilhouette';
 import { getAvatarData, storeAvatarMeasurements, getAvatarSegmentationMask, storeAdjustedLandmarks, getAdjustedLandmarks, clearAvatarData, AvatarMeasurements } from '@/services/avatar.storage.service';
+import { deleteAvatarMetadataFromBackend } from '@/services/avatar.api.service';
 import { BodyLandmarks } from '@/services/pose.service';
 import { BaseMeasurements } from '@/services/outlineCalculation.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PREVIEW_WIDTH = SCREEN_WIDTH - 64; // Account for padding
 
-type PhotoView = 'front' | 'back' | 'side';
+type PhotoView = 'front' | 'back';
 
 interface MeasurementItem {
   id: keyof AvatarMeasurements;
   label: string;
-  min: number;
-  max: number;
+  adjustRange: number;  // How much user can adjust from detected value (±)
 }
 
-const MEASUREMENT_CONFIG: MeasurementItem[] = [
-  { id: 'shoulders', label: 'Shoulders', min: 30, max: 60 },
-  { id: 'chest', label: 'Chest', min: 70, max: 140 },
-  { id: 'waist', label: 'Waist', min: 50, max: 120 },
-  { id: 'hips', label: 'Hips', min: 70, max: 130 },
-  { id: 'inseam', label: 'Inseam', min: 60, max: 100 },
+// Measurement labels only - min/max will be calculated from MediaPipe values
+const MEASUREMENT_CONFIG: { id: keyof AvatarMeasurements; label: string; adjustRange: number }[] = [
+  { id: 'shoulders', label: 'Shoulders', adjustRange: 15 },  // Allow ±15cm from detected
+  { id: 'chest', label: 'Chest', adjustRange: 25 },          // Allow ±25cm from detected
+  { id: 'waist', label: 'Waist', adjustRange: 25 },          // Allow ±25cm from detected
+  { id: 'hips', label: 'Hips', adjustRange: 25 },            // Allow ±25cm from detected
+  { id: 'inseam', label: 'Inseam', adjustRange: 15 },        // Allow ±15cm from detected
 ];
 
 export default function ReviewTwinScreen() {
@@ -52,11 +53,13 @@ export default function ReviewTwinScreen() {
   
   // Avatar data state
   const [landmarks, setLandmarks] = useState<BodyLandmarks | null>(null);
+  const [backLandmarks, setBackLandmarks] = useState<BodyLandmarks | null>(null);
   const [baseMeasurements, setBaseMeasurements] = useState<BaseMeasurements | null>(null);
   const [currentMeasurements, setCurrentMeasurements] = useState<AvatarMeasurements | null>(null);
   const [segmentationMaskDataUrl, setSegmentationMaskDataUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [storedFrontPhoto, setStoredFrontPhoto] = useState<string | null>(null);
+  const [storedBackPhoto, setStoredBackPhoto] = useState<string | null>(null);
   
   // Image dimensions for overlay
   const [previewDimensions, setPreviewDimensions] = useState({ width: PREVIEW_WIDTH, height: 360 });
@@ -100,13 +103,24 @@ export default function ReviewTwinScreen() {
       
       if (data) {
         if (data.photoUri) setStoredFrontPhoto(data.photoUri);
+        if (data.backPhotoUri) setStoredBackPhoto(data.backPhotoUri);
         
-        // Load adjusted landmarks if available, otherwise use original
+        // Load adjusted landmarks if available, otherwise use original (front)
         const adjustedLandmarks = await getAdjustedLandmarks();
         if (adjustedLandmarks) {
           setLandmarks(adjustedLandmarks);
         } else if (data.landmarks) {
           setLandmarks(data.landmarks);
+        }
+        
+        // Load back landmarks if available
+        if (data.backLandmarks) {
+          setBackLandmarks(data.backLandmarks);
+          console.log('Back landmarks loaded from MediaPipe detection');
+        } else if (data.landmarks) {
+          // Fallback to front landmarks if no back detection
+          setBackLandmarks(data.landmarks);
+          console.log('Using front landmarks as fallback for back view');
         }
         
         if (data.measurements) {
@@ -140,26 +154,32 @@ export default function ReviewTwinScreen() {
     });
   }, []);
 
-  // Increment/decrement handlers
+  // Increment/decrement handlers - use dynamic range based on MediaPipe values
   const handleIncrement = useCallback((id: keyof AvatarMeasurements) => {
     setCurrentMeasurements(prev => {
       if (!prev) return prev;
       const config = MEASUREMENT_CONFIG.find(m => m.id === id);
       if (!config) return prev;
-      const newValue = Math.min(prev[id] + 0.5, config.max);
+      // Calculate max based on detected value
+      const baseValue = baseMeasurements?.[id] ?? prev[id];
+      const maxValue = baseValue + config.adjustRange;
+      const newValue = Math.min(prev[id] + 0.5, maxValue);
       return { ...prev, [id]: Math.round(newValue * 10) / 10 };
     });
-  }, []);
+  }, [baseMeasurements]);
 
   const handleDecrement = useCallback((id: keyof AvatarMeasurements) => {
     setCurrentMeasurements(prev => {
       if (!prev) return prev;
       const config = MEASUREMENT_CONFIG.find(m => m.id === id);
       if (!config) return prev;
-      const newValue = Math.max(prev[id] - 0.5, config.min);
+      // Calculate min based on detected value
+      const baseValue = baseMeasurements?.[id] ?? prev[id];
+      const minValue = Math.max(1, baseValue - config.adjustRange);
+      const newValue = Math.max(prev[id] - 0.5, minValue);
       return { ...prev, [id]: Math.round(newValue * 10) / 10 };
     });
-  }, []);
+  }, [baseMeasurements]);
 
   // Save measurements
   const handleSaveMeasurements = async () => {
@@ -192,15 +212,17 @@ export default function ReviewTwinScreen() {
     return null;
   }
 
-  // Photos: prefer params, fallback to stored avatar photo for front
+  // Photos: prefer params, fallback to stored avatar photos
   const photos = {
     front: (params.frontPhoto as string) || storedFrontPhoto,
-    back: params.backPhoto as string,
-    side: params.sidePhoto as string,
+    back: (params.backPhoto as string) || storedBackPhoto,
   };
 
-  // Show editable silhouette when on front view and we have landmarks
-  const shouldShowSilhouette = selectedView === 'front' && !!landmarks;
+  // Get appropriate landmarks for current view
+  const currentViewLandmarks = selectedView === 'front' ? landmarks : backLandmarks;
+  
+  // Show silhouette if we have landmarks for the current view
+  const shouldShowSilhouette = !!currentViewLandmarks && !!photos[selectedView];
 
   const handleConfirmProfile = async () => {
     // Save measurements before navigating
@@ -224,8 +246,17 @@ export default function ReviewTwinScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Clear all avatar data
+              // Clear all local avatar data
               await clearAvatarData();
+              
+              // Also delete from backend (non-blocking)
+              try {
+                await deleteAvatarMetadataFromBackend();
+                console.log('Avatar metadata deleted from backend');
+              } catch (backendError) {
+                console.warn('Backend delete failed (local data cleared):', backendError);
+              }
+              
               // Navigate to the photo capture screen
               router.replace('/avatar/create-twin');
             } catch (error) {
@@ -247,7 +278,7 @@ export default function ReviewTwinScreen() {
   };
 
   const navigatePrevious = () => {
-    const views: PhotoView[] = ['front', 'back', 'side'];
+    const views: PhotoView[] = ['front', 'back'];
     const currentIndex = views.indexOf(selectedView);
     if (currentIndex > 0) {
       setSelectedView(views[currentIndex - 1]);
@@ -255,9 +286,9 @@ export default function ReviewTwinScreen() {
   };
 
   const navigateNext = () => {
-    const views: PhotoView[] = ['front', 'back', 'side'];
+    const views: PhotoView[] = ['front', 'back'];
     const currentIndex = views.indexOf(selectedView);
-    if (currentIndex < 2) {
+    if (currentIndex < 1) {
       setSelectedView(views[currentIndex + 1]);
     }
   };
@@ -306,12 +337,12 @@ export default function ReviewTwinScreen() {
                   style={styles.mainPreviewImage} 
                   resizeMode="contain"
                 />
-                {/* Body silhouette - display only, not draggable */}
-                {shouldShowSilhouette && landmarks && (
+                {/* Body silhouette - uses appropriate landmarks for each view */}
+                {shouldShowSilhouette && currentViewLandmarks && (
                   <View style={styles.outlineOverlayWrapper} pointerEvents="none">
                     <EditableBodySilhouette
-                      landmarks={landmarks}
-                      onLandmarksChange={handleLandmarksChange}
+                      landmarks={currentViewLandmarks}
+                      onLandmarksChange={selectedView === 'front' ? handleLandmarksChange : () => {}}
                       width={Math.max(1, previewDimensions.width)}
                       height={Math.max(1, previewDimensions.height)}
                       imageAspectRatio={imageAspectRatio}
@@ -324,6 +355,17 @@ export default function ReviewTwinScreen() {
                     />
                   </View>
                 )}
+                {/* View label badge */}
+                <View style={styles.viewBadge}>
+                  <Ionicons 
+                    name={selectedView === 'front' ? 'person' : 'person-outline'} 
+                    size={14} 
+                    color={Colors.white} 
+                  />
+                  <Text style={styles.viewBadgeText}>
+                    {selectedView === 'front' ? 'Front View' : 'Back View'}
+                  </Text>
+                </View>
               </>
             ) : (
               <View style={styles.avatarPlaceholder}>
@@ -348,7 +390,7 @@ export default function ReviewTwinScreen() {
 
           {/* Photo Thumbnails */}
           <View style={styles.thumbnailContainer}>
-            {(['front', 'back', 'side'] as PhotoView[]).map((view) => (
+            {(['front', 'back'] as PhotoView[]).map((view) => (
               <TouchableOpacity
                 key={view}
                 style={[
@@ -386,7 +428,12 @@ export default function ReviewTwinScreen() {
             <Text style={styles.measurementsTitle}>MEASUREMENTS</Text>
             
             {MEASUREMENT_CONFIG.map((item, index) => {
-              const value = currentMeasurements[item.id];
+              const currentValue = currentMeasurements[item.id];
+              // Use MediaPipe detected value as baseline for slider range
+              const baseValue = baseMeasurements?.[item.id] ?? currentValue;
+              // Calculate dynamic min/max based on detected value
+              const sliderMin = Math.max(1, baseValue - item.adjustRange);
+              const sliderMax = baseValue + item.adjustRange;
               
               return (
                 <View key={item.id} style={styles.measurementItem}>
@@ -396,7 +443,7 @@ export default function ReviewTwinScreen() {
                       <Text style={styles.measurementLabel}>{item.label}</Text>
                     </View>
                     <Text style={styles.measurementValue}>
-                      {value.toFixed(1)} <Text style={styles.unitText}>CM</Text>
+                      {currentValue.toFixed(1)} <Text style={styles.unitText}>CM</Text>
                     </Text>
                   </View>
 
@@ -412,13 +459,14 @@ export default function ReviewTwinScreen() {
 
                       <Slider
                         style={styles.slider}
-                        minimumValue={item.min}
-                        maximumValue={item.max}
-                        value={value}
-                        onValueChange={(val) => handleMeasurementChange(item.id, val)}
+                        minimumValue={sliderMin}
+                        maximumValue={sliderMax}
+                        value={currentValue}
+                        onSlidingComplete={(val) => handleMeasurementChange(item.id, val)}
                         minimumTrackTintColor={Colors.primary}
                         maximumTrackTintColor={Colors.gray[200]}
                         thumbTintColor={Colors.primary}
+                        step={0.1}
                       />
 
                       <TouchableOpacity
@@ -428,6 +476,13 @@ export default function ReviewTwinScreen() {
                         <Ionicons name="add" size={20} color={Colors.primary} />
                       </TouchableOpacity>
                     </View>
+                  )}
+
+                  {/* Show detected value indicator in edit mode */}
+                  {isEditMode && baseMeasurements && (
+                    <Text style={styles.detectedValueText}>
+                      Detected: {baseMeasurements[item.id].toFixed(1)} cm
+                    </Text>
                   )}
                 </View>
               );
@@ -561,6 +616,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  viewBadge: {
+    position: 'absolute',
+    bottom: 16,
+    left: '50%',
+    transform: [{ translateX: -55 }],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  viewBadgeText: {
+    fontSize: 12,
+    fontFamily: 'ManropeMedium',
+    color: Colors.white,
+  },
   navArrow: {
     position: 'absolute',
     width: 40,
@@ -669,6 +742,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'ManropeRegular',
     color: Colors.text.secondary,
+  },
+  detectedValueText: {
+    fontSize: 11,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+    marginTop: 4,
+    textAlign: 'right',
   },
   sliderContainer: {
     flexDirection: 'row',

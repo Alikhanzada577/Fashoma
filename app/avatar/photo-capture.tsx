@@ -21,17 +21,35 @@ import { PoseDetectorWebView, PoseDetectorRef } from '@/components/PoseDetection
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Single photo capture - only front T-pose needed
-const STEP_CONFIG = {
-  title: 'Strike a T-Pose',
-  instruction: 'Wait for green indicator, then capture',
+// Two photos: Front and Back
+type PhotoStep = 'front' | 'back';
+
+const STEP_CONFIG: Record<PhotoStep, { title: string; instruction: string; readyText: string }> = {
+  front: {
+    title: 'Front T-Pose',
+    instruction: 'Stand facing the camera with arms out',
+    readyText: '✓ Pose detected! Tap to capture',
+  },
+  back: {
+    title: 'Back View',
+    instruction: 'Turn around, back facing the camera (same pose)',
+    readyText: '✓ Ready! Tap to capture',
+  },
 };
 
 export default function PhotoCaptureScreen() {
   const params = useLocalSearchParams<{ mode: string }>();
   const isUploadMode = params.mode === 'upload';
   
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  // Current step
+  const [currentStep, setCurrentStep] = useState<PhotoStep>('front');
+  
+  // Captured photos
+  const [photos, setPhotos] = useState<{ front: string | null; back: string | null }>({
+    front: null,
+    back: null,
+  });
+  
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -70,34 +88,39 @@ export default function PhotoCaptureScreen() {
     return () => pulse.stop();
   }, []);
 
-  // Start real-time pose detection
+  // Start real-time pose detection (only for front photo)
   const startRealtimeDetection = useCallback(() => {
     if (detectionInterval.current) return;
     
     detectionInterval.current = setInterval(async () => {
-      if (!cameraRef.current || !poseDetectorRef.current || isDetecting || capturedPhoto) return;
+      if (!cameraRef.current || !poseDetectorRef.current || isDetecting || photos[currentStep]) return;
       
       try {
         setIsDetecting(true);
         
         // Take a quick snapshot
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.3, // Low quality for speed
+          quality: 0.3,
           skipProcessing: true,
         });
         
         if (photo?.uri) {
-          // Detect pose in snapshot
-          const result = await poseDetectorRef.current.detectPose(photo.uri);
-          setIsPoseDetected(result.success && !!result.landmarks);
+          // Detect pose in snapshot (only for front view)
+          if (currentStep === 'front') {
+            const result = await poseDetectorRef.current.detectPose(photo.uri);
+            setIsPoseDetected(result.success && !!result.landmarks);
+          } else {
+            // For back photo, we don't need pose detection, just allow capture
+            setIsPoseDetected(true);
+          }
         }
       } catch (error) {
-        // Silently fail - don't spam errors
+        // Silently fail
       } finally {
         setIsDetecting(false);
       }
-    }, 2000); // Check every 2 seconds
-  }, [isDetecting, capturedPhoto]);
+    }, 2000);
+  }, [isDetecting, photos, currentStep]);
 
   // Stop detection when component unmounts or photo is taken
   useEffect(() => {
@@ -111,13 +134,20 @@ export default function PhotoCaptureScreen() {
 
   // Start detection when pose detector is ready and camera is active
   useEffect(() => {
-    if (poseReady && !isUploadMode && !capturedPhoto) {
+    if (poseReady && !isUploadMode && !photos[currentStep]) {
       startRealtimeDetection();
     } else if (detectionInterval.current) {
       clearInterval(detectionInterval.current);
       detectionInterval.current = null;
     }
-  }, [poseReady, isUploadMode, capturedPhoto, startRealtimeDetection]);
+  }, [poseReady, isUploadMode, photos, currentStep, startRealtimeDetection]);
+
+  // For back photo, auto-set pose detected since we can't detect back poses
+  useEffect(() => {
+    if (currentStep === 'back') {
+      setIsPoseDetected(true);
+    }
+  }, [currentStep]);
 
   useEffect(() => {
     if (isUploadMode) {
@@ -150,16 +180,29 @@ export default function PhotoCaptureScreen() {
       detectionInterval.current = null;
     }
     
-    setCapturedPhoto(uri);
-    handleComplete(uri);
+    // Save photo for current step
+    setPhotos(prev => ({ ...prev, [currentStep]: uri }));
+    
+    // Move to next step or complete
+    if (currentStep === 'front') {
+      // Move to back photo
+      setTimeout(() => {
+        setCurrentStep('back');
+        setIsPoseDetected(true); // Back photo doesn't need pose detection
+      }, 500);
+    } else {
+      // Both photos captured, navigate to processing
+      handleComplete(photos.front!, uri);
+    }
   };
 
-  const handleComplete = (photoUri: string) => {
-    console.log('Photo captured:', photoUri);
+  const handleComplete = (frontPhoto: string, backPhoto: string) => {
+    console.log('Photos captured:', { frontPhoto, backPhoto });
     router.replace({
       pathname: '/avatar/processing',
       params: {
-        frontPhoto: photoUri,
+        frontPhoto,
+        backPhoto,
       },
     });
   };
@@ -182,8 +225,8 @@ export default function PhotoCaptureScreen() {
   };
 
   const retakePhoto = () => {
-    setCapturedPhoto(null);
-    setIsPoseDetected(false);
+    setPhotos(prev => ({ ...prev, [currentStep]: null }));
+    setIsPoseDetected(currentStep === 'back');
   };
 
   const toggleCameraFacing = () => {
@@ -211,7 +254,9 @@ export default function PhotoCaptureScreen() {
     );
   }
 
-  const hasPhoto = !!capturedPhoto;
+  const currentPhoto = photos[currentStep];
+  const hasPhoto = !!currentPhoto;
+  const stepConfig = STEP_CONFIG[currentStep];
 
   return (
     <View style={styles.container}>
@@ -227,7 +272,7 @@ export default function PhotoCaptureScreen() {
       {/* Camera View or Photo Preview */}
       <View style={styles.cameraContainer}>
         {hasPhoto ? (
-          <Image source={{ uri: capturedPhoto }} style={styles.camera} />
+          <Image source={{ uri: currentPhoto }} style={styles.camera} />
         ) : isUploadMode ? (
           <View style={[styles.camera, styles.uploadPlaceholder]}>
             <Ionicons name="images-outline" size={64} color={Colors.white} />
@@ -241,7 +286,7 @@ export default function PhotoCaptureScreen() {
           />
         )}
 
-        {/* Overlay UI - positioned absolutely over camera */}
+        {/* Overlay UI */}
         {!hasPhoto && !isUploadMode && (
           <View style={styles.overlay} pointerEvents="box-none">
             {/* Header */}
@@ -249,6 +294,13 @@ export default function PhotoCaptureScreen() {
               <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                 <Ionicons name="chevron-back" size={28} color={Colors.white} />
               </TouchableOpacity>
+              
+              {/* Step Progress */}
+              <View style={styles.stepProgress}>
+                <View style={[styles.stepDot, currentStep === 'front' && styles.stepDotActive]} />
+                <View style={styles.stepLine} />
+                <View style={[styles.stepDot, currentStep === 'back' && styles.stepDotActive]} />
+              </View>
               
               {/* Pose Detection Indicator */}
               <Animated.View 
@@ -260,17 +312,10 @@ export default function PhotoCaptureScreen() {
               >
                 <Ionicons 
                   name={isPoseDetected ? "checkmark-circle" : "scan-outline"} 
-                  size={20} 
+                  size={18} 
                   color={Colors.white} 
                 />
-                <Text style={styles.poseIndicatorText}>
-                  {isPoseDetected ? 'POSE DETECTED' : 'SCANNING...'}
-                </Text>
               </Animated.View>
-              
-              <TouchableOpacity style={styles.infoButton}>
-                <Ionicons name="information-circle-outline" size={24} color={Colors.white} />
-              </TouchableOpacity>
             </View>
 
             {/* Body Guide */}
@@ -283,7 +328,10 @@ export default function PhotoCaptureScreen() {
 
             {/* Step Indicator */}
             <View style={styles.stepIndicator} pointerEvents="none">
-              <Text style={styles.stepTitle}>{STEP_CONFIG.title}</Text>
+              <Text style={styles.stepLabel}>
+                {currentStep === 'front' ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
+              </Text>
+              <Text style={styles.stepTitle}>{stepConfig.title}</Text>
             </View>
 
             {/* Instruction */}
@@ -293,10 +341,24 @@ export default function PhotoCaptureScreen() {
             ]} pointerEvents="none">
               <Text style={styles.instruction}>
                 {isPoseDetected 
-                  ? '✓ Great! Tap the button to capture' 
-                  : STEP_CONFIG.instruction}
+                  ? stepConfig.readyText 
+                  : stepConfig.instruction}
               </Text>
             </View>
+          </View>
+        )}
+
+        {/* Photo Preview Overlay */}
+        {hasPhoto && (
+          <View style={styles.previewOverlay}>
+            <Text style={styles.previewTitle}>
+              {currentStep === 'front' ? 'Front Photo' : 'Back Photo'}
+            </Text>
+            <Text style={styles.previewSubtitle}>
+              {currentStep === 'front' 
+                ? 'Looking good! Ready for back photo.' 
+                : 'Perfect! Ready to process.'}
+            </Text>
           </View>
         )}
       </View>
@@ -310,9 +372,27 @@ export default function PhotoCaptureScreen() {
 
         {/* Shutter Button */}
         {hasPhoto ? (
-          <TouchableOpacity style={styles.retakeButton} onPress={retakePhoto}>
-            <Ionicons name="refresh" size={32} color={Colors.white} />
-          </TouchableOpacity>
+          <View style={styles.photoActions}>
+            <TouchableOpacity style={styles.retakeButton} onPress={retakePhoto}>
+              <Ionicons name="refresh" size={24} color={Colors.white} />
+              <Text style={styles.actionButtonText}>Retake</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.continueButton} 
+              onPress={() => {
+                if (currentStep === 'front') {
+                  setCurrentStep('back');
+                } else {
+                  handleComplete(photos.front!, photos.back!);
+                }
+              }}
+            >
+              <Text style={styles.continueButtonText}>
+                {currentStep === 'front' ? 'Next' : 'Continue'}
+              </Text>
+              <Ionicons name="arrow-forward" size={20} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
         ) : (
           <TouchableOpacity
             style={[
@@ -364,29 +444,42 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-  infoButton: {
-    padding: 8,
-  },
-  // Pose Indicator Styles
-  poseIndicator: {
+  // Step Progress
+  stepProgress: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    gap: 8,
+  },
+  stepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  stepDotActive: {
+    backgroundColor: '#22C55E',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  stepLine: {
+    width: 30,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  // Pose Indicator
+  poseIndicator: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   poseDetected: {
-    backgroundColor: 'rgba(34, 197, 94, 0.9)', // Green
+    backgroundColor: 'rgba(34, 197, 94, 0.9)',
   },
   poseNotDetected: {
-    backgroundColor: 'rgba(100, 100, 100, 0.8)', // Gray
-  },
-  poseIndicatorText: {
-    fontSize: 11,
-    fontFamily: 'ManropeSemiBold',
-    color: Colors.white,
-    letterSpacing: 0.5,
+    backgroundColor: 'rgba(100, 100, 100, 0.8)',
   },
   alignmentContainer: {
     flex: 1,
@@ -402,18 +495,24 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   bodyGuideDetected: {
-    borderColor: 'rgba(34, 197, 94, 0.7)', // Green when detected
+    borderColor: 'rgba(34, 197, 94, 0.7)',
     borderStyle: 'solid',
   },
   stepIndicator: {
     alignItems: 'center',
     marginBottom: 16,
   },
+  stepLabel: {
+    fontSize: 12,
+    fontFamily: 'ManropeMedium',
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
   stepTitle: {
     fontSize: 24,
     fontFamily: 'ManropeSemiBold',
     color: Colors.white,
-    marginBottom: 8,
   },
   instructionContainer: {
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -431,6 +530,28 @@ const styles = StyleSheet.create({
     fontFamily: 'ManropeMedium',
     color: Colors.white,
     textAlign: 'center',
+  },
+  // Preview Overlay
+  previewOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  previewTitle: {
+    fontSize: 18,
+    fontFamily: 'ManropeSemiBold',
+    color: Colors.white,
+    marginBottom: 4,
+  },
+  previewSubtitle: {
+    fontSize: 14,
+    fontFamily: 'ManropeRegular',
+    color: 'rgba(255,255,255,0.7)',
   },
   controls: {
     flexDirection: 'row',
@@ -460,7 +581,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   shutterButtonReady: {
-    borderColor: '#22C55E', // Green border when ready
+    borderColor: '#22C55E',
   },
   shutterInner: {
     width: 64,
@@ -469,15 +590,40 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   shutterInnerReady: {
-    backgroundColor: '#22C55E', // Green when ready
+    backgroundColor: '#22C55E',
+  },
+  // Photo Actions
+  photoActions: {
+    flexDirection: 'row',
+    gap: 16,
   },
   retakeButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.primary,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 25,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontFamily: 'ManropeMedium',
+    color: Colors.white,
+  },
+  continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: Colors.primary,
+    borderRadius: 25,
+  },
+  continueButtonText: {
+    fontSize: 14,
+    fontFamily: 'ManropeSemiBold',
+    color: Colors.white,
   },
   permissionContainer: {
     flex: 1,

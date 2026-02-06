@@ -25,9 +25,12 @@ export interface AvatarMeasurements {
 
 export interface AvatarData {
   measurements: AvatarMeasurements;
-  photoUri: string | null;
-  landmarks: BodyLandmarks | null;      // Detected body landmarks from T-pose
-  bodyDimensions: BodyDimensions | null; // Calculated dimensions from landmarks
+  photoUri: string | null;              // Front photo URI
+  backPhotoUri: string | null;          // Back photo URI
+  landmarks: BodyLandmarks | null;      // Detected body landmarks from front T-pose
+  bodyDimensions: BodyDimensions | null; // Calculated dimensions from front landmarks
+  backLandmarks: BodyLandmarks | null;  // Detected body landmarks from back T-pose
+  backBodyDimensions: BodyDimensions | null; // Calculated dimensions from back landmarks
   createdAt: string;
   updatedAt: string;
 }
@@ -52,8 +55,11 @@ export const storeAvatarMeasurements = async (measurements: AvatarMeasurements):
     const data: AvatarData = {
       measurements,
       photoUri: null,
+      backPhotoUri: null,
       landmarks: null,
       bodyDimensions: null,
+      backLandmarks: null,
+      backBodyDimensions: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -62,6 +68,7 @@ export const storeAvatarMeasurements = async (measurements: AvatarMeasurements):
     const existing = await getAvatarData();
     if (existing) {
       if (existing.photoUri) data.photoUri = existing.photoUri;
+      if (existing.backPhotoUri) data.backPhotoUri = existing.backPhotoUri;
       if (existing.landmarks) data.landmarks = existing.landmarks;
       if (existing.bodyDimensions) data.bodyDimensions = existing.bodyDimensions;
       data.createdAt = existing.createdAt;
@@ -75,21 +82,29 @@ export const storeAvatarMeasurements = async (measurements: AvatarMeasurements):
 };
 
 /**
- * Store avatar photo URI on device
+ * Store avatar photo URI(s) on device
+ * @param photoUri - Front photo URI (required)
+ * @param backPhotoUri - Back photo URI (optional)
  */
-export const storeAvatarPhoto = async (photoUri: string): Promise<void> => {
+export const storeAvatarPhoto = async (photoUri: string, backPhotoUri?: string): Promise<void> => {
   try {
     const existing = await getAvatarData();
     const data: AvatarData = existing || {
       measurements: { shoulders: 0, chest: 0, waist: 0, hips: 0, inseam: 0 },
       photoUri: null,
+      backPhotoUri: null,
       landmarks: null,
       bodyDimensions: null,
+      backLandmarks: null,
+      backBodyDimensions: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     
     data.photoUri = photoUri;
+    if (backPhotoUri) {
+      data.backPhotoUri = backPhotoUri;
+    }
     data.updatedAt = new Date().toISOString();
     
     await saveAvatarData(data);
@@ -100,7 +115,7 @@ export const storeAvatarPhoto = async (photoUri: string): Promise<void> => {
 };
 
 /**
- * Store avatar landmarks and body dimensions on device
+ * Store avatar landmarks and body dimensions on device (front view)
  */
 export const storeAvatarLandmarks = async (
   landmarks: BodyLandmarks,
@@ -111,8 +126,11 @@ export const storeAvatarLandmarks = async (
     const data: AvatarData = existing || {
       measurements: { shoulders: 0, chest: 0, waist: 0, hips: 0, inseam: 0 },
       photoUri: null,
+      backPhotoUri: null,
       landmarks: null,
       bodyDimensions: null,
+      backLandmarks: null,
+      backBodyDimensions: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -122,7 +140,7 @@ export const storeAvatarLandmarks = async (
     data.updatedAt = new Date().toISOString();
     
     await saveAvatarData(data);
-    console.log('Avatar landmarks stored successfully');
+    console.log('Avatar front landmarks stored successfully');
   } catch (error) {
     console.error('Error storing avatar landmarks:', error);
     throw error;
@@ -130,7 +148,40 @@ export const storeAvatarLandmarks = async (
 };
 
 /**
- * Get avatar landmarks
+ * Store avatar back landmarks and body dimensions on device (back view)
+ */
+export const storeAvatarBackLandmarks = async (
+  landmarks: BodyLandmarks,
+  bodyDimensions: BodyDimensions
+): Promise<void> => {
+  try {
+    const existing = await getAvatarData();
+    const data: AvatarData = existing || {
+      measurements: { shoulders: 0, chest: 0, waist: 0, hips: 0, inseam: 0 },
+      photoUri: null,
+      backPhotoUri: null,
+      landmarks: null,
+      bodyDimensions: null,
+      backLandmarks: null,
+      backBodyDimensions: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    
+    data.backLandmarks = landmarks;
+    data.backBodyDimensions = bodyDimensions;
+    data.updatedAt = new Date().toISOString();
+    
+    await saveAvatarData(data);
+    console.log('Avatar back landmarks stored successfully');
+  } catch (error) {
+    console.error('Error storing avatar back landmarks:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get avatar landmarks (front)
  */
 export const getAvatarLandmarks = async (): Promise<BodyLandmarks | null> => {
   const data = await getAvatarData();
@@ -138,11 +189,27 @@ export const getAvatarLandmarks = async (): Promise<BodyLandmarks | null> => {
 };
 
 /**
- * Get avatar body dimensions
+ * Get avatar back landmarks
+ */
+export const getAvatarBackLandmarks = async (): Promise<BodyLandmarks | null> => {
+  const data = await getAvatarData();
+  return data?.backLandmarks || null;
+};
+
+/**
+ * Get avatar body dimensions (front)
  */
 export const getAvatarBodyDimensions = async (): Promise<BodyDimensions | null> => {
   const data = await getAvatarData();
   return data?.bodyDimensions || null;
+};
+
+/**
+ * Get avatar back body dimensions
+ */
+export const getAvatarBackBodyDimensions = async (): Promise<BodyDimensions | null> => {
+  const data = await getAvatarData();
+  return data?.backBodyDimensions || null;
 };
 
 /**

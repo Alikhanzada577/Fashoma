@@ -16,6 +16,7 @@ import {
   Easing,
   Dimensions,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
@@ -25,8 +26,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PoseDetectorWebView, PoseDetectorRef } from '@/components/PoseDetection/PoseDetectorWebView';
-import { storeAvatarLandmarks, storeAvatarPhoto, storeAvatarMeasurements, storeAvatarSegmentationMask } from '@/services/avatar.storage.service';
+import { storeAvatarLandmarks, storeAvatarBackLandmarks, storeAvatarPhoto, storeAvatarMeasurements, storeAvatarSegmentationMask } from '@/services/avatar.storage.service';
 import { calculateMeasurementsFromLandmarks, validateMeasurements } from '@/services/measurementCalculation.service';
+import { saveAvatarMetadataToBackend } from '@/services/avatar.api.service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -59,25 +61,26 @@ export default function ProcessingScreen() {
     setDetectionFailed(true);
   };
 
-  // Process the captured photo with real MediaPipe detection
+  // Process the captured photos with real MediaPipe detection
   const processPhotoWithMediaPipe = async () => {
     if (hasProcessed.current) return;
     hasProcessed.current = true;
     setDetectionFailed(false);
 
     try {
-      const photoUri = params.frontPhoto as string;
+      const frontPhotoUri = params.frontPhoto as string;
+      const backPhotoUri = params.backPhoto as string;
 
-      if (!photoUri) {
-        console.warn('No photo URI provided');
+      if (!frontPhotoUri) {
+        console.warn('No front photo URI provided');
         setProcessingStatus('No photo found. Please try again.');
         setDetectionFailed(true);
         return;
       }
 
-      // Step 1: Store the photo
-      setProcessingStatus('Storing your photo...');
-      await storeAvatarPhoto(photoUri);
+      // Step 1: Store both photos
+      setProcessingStatus('Storing your photos...');
+      await storeAvatarPhoto(frontPhotoUri, backPhotoUri);
 
       // Step 2: Wait for MediaPipe to be ready (max 15 seconds)
       setProcessingStatus('Loading AI model...');
@@ -96,9 +99,9 @@ export default function ProcessingScreen() {
 
       // Step 3: Detect pose using MediaPipe
       setProcessingStatus('Detecting your body pose...');
-      console.log('Starting pose detection for:', photoUri);
+      console.log('Starting pose detection for:', frontPhotoUri);
 
-      const result = await poseDetectorRef.current.detectPose(photoUri);
+      const result = await poseDetectorRef.current.detectPose(frontPhotoUri);
 
       if (!result.success || !result.landmarks || !result.bodyDimensions) {
         console.warn('Pose detection failed:', result.message);
@@ -138,12 +141,47 @@ export default function ProcessingScreen() {
       // Step 6: Body segmentation mask for outline overlay
       setProcessingStatus('Creating body outline...');
       try {
-        const maskDataUrl = await poseDetectorRef.current.getSegmentationMask(photoUri);
+        const maskDataUrl = await poseDetectorRef.current.getSegmentationMask(frontPhotoUri);
         if (maskDataUrl) {
           await storeAvatarSegmentationMask(maskDataUrl);
         }
       } catch (maskErr) {
         console.warn('Segmentation mask failed (outline will use landmarks):', maskErr);
+      }
+
+      // Step 7: Detect pose on back photo (if available)
+      if (backPhotoUri) {
+        setProcessingStatus('Detecting back pose...');
+        try {
+          console.log('Starting back pose detection for:', backPhotoUri);
+          const backResult = await poseDetectorRef.current.detectPose(backPhotoUri);
+          
+          if (backResult.success && backResult.landmarks && backResult.bodyDimensions) {
+            console.log('Back pose detected successfully!');
+            await storeAvatarBackLandmarks(backResult.landmarks, backResult.bodyDimensions);
+          } else {
+            console.warn('Back pose detection failed - will use front landmarks as fallback');
+          }
+        } catch (backPoseError) {
+          console.warn('Back pose detection error (will use front landmarks):', backPoseError);
+        }
+      }
+
+      // Step 8: Save metadata to backend (non-blocking)
+      setProcessingStatus('Syncing to cloud...');
+      try {
+        await saveAvatarMetadataToBackend({
+          captureMethod: 'camera',
+          deviceType: Platform.OS === 'ios' ? 'ios' : 'android',
+          qualityScore: validation.valid ? 8 : 5, // Higher score if measurements are valid
+          captureEnvironment: 'unknown',
+          consentGiven: true,
+          dataRetentionAgreed: true,
+        });
+        console.log('Avatar metadata synced to backend');
+      } catch (backendError) {
+        // Don't fail if backend sync fails - local data is saved
+        console.warn('Backend sync failed (local data saved):', backendError);
       }
 
       setProcessingStatus('Avatar created successfully!');
@@ -153,7 +191,8 @@ export default function ProcessingScreen() {
       router.replace({
         pathname: '/avatar/review-twin',
         params: {
-          frontPhoto: photoUri,
+          frontPhoto: frontPhotoUri,
+          backPhoto: backPhotoUri || '',
         },
       });
 
@@ -381,7 +420,7 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 14,
     fontFamily: 'ManropeRegular',
-    color: Colors.text.tertiary,
+    color: Colors.text.secondary,
     textAlign: 'left',
     lineHeight: 22,
     marginTop: 24,
@@ -413,7 +452,7 @@ const styles = StyleSheet.create({
   skipButtonText: {
     fontSize: 14,
     fontFamily: 'ManropeRegular',
-    color: Colors.text.tertiary,
+    color: Colors.text.secondary,
     textDecorationLine: 'underline',
   },
 });

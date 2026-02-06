@@ -55,8 +55,6 @@ const productSizesToSizeChart = (sizes: ProductSize[]): SizeChart => {
     chart[size.label] = {
       chest: size.chestWidth,
       shoulders: size.shoulderWidth,
-      length: size.length,
-      sleeves: size.sleeveLength,
       waist: size.waistWidth,
       hips: size.hipWidth,
       inseam: size.inseam,
@@ -76,15 +74,26 @@ const getImageSource = (source: ImageSource | undefined | null): ImageSourceProp
   return { uri: source };
 };
 
+// View type for front/back
+type ViewType = 'front' | 'back';
+
 export default function TryOnScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [userMeasurements, setUserMeasurements] = useState<AvatarMeasurements | null>(null);
   const [hasAvatarData, setHasAvatarData] = useState(false);
   const [userPhotoUri, setUserPhotoUri] = useState<string | null>(null);
+  const [userBackPhotoUri, setUserBackPhotoUri] = useState<string | null>(null);
   
-  // Landmarks for precise garment positioning
+  // View selection (front/back)
+  const [selectedView, setSelectedView] = useState<ViewType>('front');
+  
+  // Landmarks for precise garment positioning (front)
   const [landmarks, setLandmarks] = useState<BodyLandmarks | null>(null);
   const [bodyDimensions, setBodyDimensions] = useState<BodyDimensions | null>(null);
+  
+  // Back landmarks for back view positioning
+  const [backLandmarks, setBackLandmarks] = useState<BodyLandmarks | null>(null);
+  const [backBodyDimensions, setBackBodyDimensions] = useState<BodyDimensions | null>(null);
   
   // Category selection
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('tshirt');
@@ -141,14 +150,25 @@ export default function TryOnScreen() {
         if (avatarData) {
           setUserMeasurements(avatarData.measurements);
           setUserPhotoUri(avatarData.photoUri);
+          setUserBackPhotoUri(avatarData.backPhotoUri || null);
           setBodyDimensions(avatarData.bodyDimensions);
           
-          // Prefer adjusted landmarks if available
+          // Prefer adjusted landmarks if available (front)
           const adjustedLandmarks = await getAdjustedLandmarks();
           if (adjustedLandmarks) {
             setLandmarks(adjustedLandmarks);
           } else if (avatarData.landmarks) {
             setLandmarks(avatarData.landmarks);
+          }
+          
+          // Load back landmarks (from MediaPipe detection or fallback to front)
+          if (avatarData.backLandmarks) {
+            setBackLandmarks(avatarData.backLandmarks);
+            setBackBodyDimensions(avatarData.backBodyDimensions);
+          } else if (avatarData.landmarks) {
+            // Fallback to front landmarks if no back detection
+            setBackLandmarks(avatarData.landmarks);
+            setBackBodyDimensions(avatarData.bodyDimensions);
           }
         }
       }
@@ -295,6 +315,43 @@ export default function TryOnScreen() {
           </View>
         )}
 
+        {/* Front/Back View Toggle - Only show if product has back image or user has back photo */}
+        {selectedProduct && (userBackPhotoUri || selectedProduct.backImageUrl) && (
+          <View style={styles.viewToggle}>
+            <TouchableOpacity
+              style={[
+                styles.viewToggleButton,
+                selectedView === 'front' && styles.viewToggleButtonActive,
+              ]}
+              onPress={() => setSelectedView('front')}
+            >
+              <Text style={[
+                styles.viewToggleText,
+                selectedView === 'front' && styles.viewToggleTextActive,
+              ]}>
+                Front
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.viewToggleButton,
+                selectedView === 'back' && styles.viewToggleButtonActive,
+                !userBackPhotoUri && styles.viewToggleButtonDisabled,
+              ]}
+              onPress={() => userBackPhotoUri && setSelectedView('back')}
+              disabled={!userBackPhotoUri}
+            >
+              <Text style={[
+                styles.viewToggleText,
+                selectedView === 'back' && styles.viewToggleTextActive,
+                !userBackPhotoUri && styles.viewToggleTextDisabled,
+              ]}>
+                Back
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Try-On Renderer - Garment on User Photo */}
         {selectedProduct && (
           <View style={styles.rendererContainer}>
@@ -303,11 +360,13 @@ export default function TryOnScreen() {
               garmentType={garmentType}
               selectedSize={selectedSizeLabel}
               sizeChart={sizeChart}
-              garmentImage={getImageSource(selectedProduct.imageUrl)}
+              garmentImage={selectedView === 'front' 
+                ? getImageSource(selectedProduct.imageUrl) 
+                : getImageSource(selectedProduct.backImageUrl) || getImageSource(selectedProduct.imageUrl)}
               garmentColor={GARMENT_COLORS[garmentType]}
-              userPhotoUri={userPhotoUri}
-              landmarks={landmarks}
-              bodyDimensions={bodyDimensions}
+              userPhotoUri={selectedView === 'front' ? userPhotoUri : (userBackPhotoUri || userPhotoUri)}
+              landmarks={selectedView === 'front' ? landmarks : (backLandmarks || landmarks)}
+              bodyDimensions={selectedView === 'front' ? bodyDimensions : (backBodyDimensions || bodyDimensions)}
             />
           </View>
         )}
@@ -509,6 +568,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'ManropeRegular',
     color: Colors.text.secondary,
+  },
+  // View Toggle
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.gray[100],
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 16,
+  },
+  viewToggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  viewToggleButtonActive: {
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  viewToggleButtonDisabled: {
+    opacity: 0.5,
+  },
+  viewToggleText: {
+    fontSize: 14,
+    fontFamily: 'ManropeMedium',
+    color: Colors.text.secondary,
+  },
+  viewToggleTextActive: {
+    color: Colors.text.primary,
+    fontFamily: 'ManropeSemiBold',
+  },
+  viewToggleTextDisabled: {
+    color: Colors.gray[400],
   },
   // Renderer
   rendererContainer: {
