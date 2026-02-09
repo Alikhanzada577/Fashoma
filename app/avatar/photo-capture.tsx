@@ -62,6 +62,11 @@ export default function PhotoCaptureScreen() {
   const detectionInterval = useRef<NodeJS.Timeout | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  const [timerOption, setTimerOption] = useState<0 | 3 | 5>(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
   const [fontsLoaded] = useFonts({
     ManropeRegular: Manrope_400Regular,
     ManropeMedium: Manrope_500Medium,
@@ -122,12 +127,16 @@ export default function PhotoCaptureScreen() {
     }, 2000);
   }, [isDetecting, photos, currentStep]);
 
-  // Stop detection when component unmounts or photo is taken
+  // Stop detection and countdown when component unmounts or photo is taken
   useEffect(() => {
     return () => {
       if (detectionInterval.current) {
         clearInterval(detectionInterval.current);
         detectionInterval.current = null;
+      }
+      if (countdownTimeoutRef.current) {
+        clearTimeout(countdownTimeoutRef.current);
+        countdownTimeoutRef.current = null;
       }
     };
   }, []);
@@ -148,6 +157,25 @@ export default function PhotoCaptureScreen() {
       setIsPoseDetected(true);
     }
   }, [currentStep]);
+
+  // Countdown timer: when it hits 0, capture
+  useEffect(() => {
+    if (countdown === null || countdown < 1) return;
+    const value = countdown;
+    const t = setTimeout(() => {
+      if (value === 1) {
+        captureRef.current?.();
+        setCountdown(null);
+      } else {
+        setCountdown(value - 1);
+      }
+    }, 1000);
+    countdownTimeoutRef.current = t;
+    return () => {
+      clearTimeout(t);
+      countdownTimeoutRef.current = null;
+    };
+  }, [countdown]);
 
   useEffect(() => {
     if (isUploadMode) {
@@ -207,20 +235,30 @@ export default function PhotoCaptureScreen() {
     });
   };
 
-  const takePicture = async () => {
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.8,
-          skipProcessing: false,
-        });
-        if (photo?.uri) {
-          handlePhotoTaken(photo.uri);
-        }
-      } catch (error) {
-        console.error('Error taking picture:', error);
-        Alert.alert('Error', 'Failed to take picture. Please try again.');
+  const doCapture = async () => {
+    if (!cameraRef.current) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+        skipProcessing: false,
+      });
+      if (photo?.uri) {
+        handlePhotoTaken(photo.uri);
       }
+    } catch (error) {
+      console.error('Error taking picture:', error);
+      Alert.alert('Error', 'Failed to take picture. Please try again.');
+    }
+  };
+
+  captureRef.current = doCapture;
+
+  const takePicture = () => {
+    if (countdown !== null) return;
+    if (timerOption > 0) {
+      setCountdown(timerOption);
+    } else {
+      doCapture();
     }
   };
 
@@ -361,7 +399,40 @@ export default function PhotoCaptureScreen() {
             </Text>
           </View>
         )}
+
+        {/* Countdown overlay */}
+        {countdown !== null && countdown > 0 && (
+          <View style={styles.countdownOverlay} pointerEvents="none">
+            <Text style={styles.countdownText}>{countdown}</Text>
+          </View>
+        )}
       </View>
+
+      {/* Timer selector - only when capturing (camera mode, no photo yet) */}
+      {!hasPhoto && !isUploadMode && (
+        <View style={styles.timerRow}>
+          {([0, 3, 5] as const).map((seconds) => (
+            <TouchableOpacity
+              key={seconds}
+              style={[
+                styles.timerOption,
+                timerOption === seconds && styles.timerOptionActive,
+              ]}
+              onPress={() => setTimerOption(seconds)}
+              disabled={countdown !== null}
+            >
+              <Text
+                style={[
+                  styles.timerOptionText,
+                  timerOption === seconds && styles.timerOptionTextActive,
+                ]}
+              >
+                {seconds === 0 ? 'Instant' : `${seconds}s`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Bottom Controls */}
       <View style={styles.controls}>
@@ -397,9 +468,10 @@ export default function PhotoCaptureScreen() {
           <TouchableOpacity
             style={[
               styles.shutterButton,
-              isPoseDetected && styles.shutterButtonReady
+              (isPoseDetected || currentStep === 'back') && styles.shutterButtonReady
             ]}
             onPress={isUploadMode ? pickImage : takePicture}
+            disabled={countdown !== null}
           >
             <View style={[
               styles.shutterInner,
@@ -530,6 +602,42 @@ const styles = StyleSheet.create({
     fontFamily: 'ManropeMedium',
     color: Colors.white,
     textAlign: 'center',
+  },
+  countdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  countdownText: {
+    fontSize: 120,
+    fontFamily: 'ManropeSemiBold',
+    color: Colors.white,
+  },
+  timerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  timerOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  timerOptionActive: {
+    backgroundColor: Colors.primary,
+  },
+  timerOptionText: {
+    fontSize: 14,
+    fontFamily: 'ManropeMedium',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  timerOptionTextActive: {
+    color: Colors.white,
   },
   // Preview Overlay
   previewOverlay: {

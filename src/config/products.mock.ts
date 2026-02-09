@@ -11,8 +11,8 @@ import { Product, ProductSize } from './products.types';
 export const LOCAL_PRODUCT_IMAGES = {
   tshirtFront: require('@/assets/Product/Tshirt-front-photo.png'),
   tshirtBack: require('@/assets/Product/T_Shirt_Design_backpng.png'),
-  pantsFront: require('@/assets/Product/frontPant-png.png'),
-  pantsBack: require('@/assets/Product/backpant-.png'),
+  pantsFront: require('@/assets/Product/Pant_1_Front1.png'),
+  pantsBack: require('@/assets/Product/Pant_1_Backpng.png'),
 };
 
 /**
