@@ -54,12 +54,10 @@ export default function PhotoCaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   
-  // Pose detection state
-  const [isPoseDetected, setIsPoseDetected] = useState(false);
-  const [isDetecting, setIsDetecting] = useState(false);
+  // Pose detection state (capture only on user tap; no runtime snapshots)
+  const [isPoseDetected, setIsPoseDetected] = useState(true);
   const [poseReady, setPoseReady] = useState(false);
   const poseDetectorRef = useRef<PoseDetectorRef>(null);
-  const detectionInterval = useRef<NodeJS.Timeout | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const [timerOption, setTimerOption] = useState<0 | 3 | 5>(0);
@@ -93,47 +91,12 @@ export default function PhotoCaptureScreen() {
     return () => pulse.stop();
   }, []);
 
-  // Start real-time pose detection (only for front photo)
-  const startRealtimeDetection = useCallback(() => {
-    if (detectionInterval.current) return;
-    
-    detectionInterval.current = setInterval(async () => {
-      if (!cameraRef.current || !poseDetectorRef.current || isDetecting || photos[currentStep]) return;
-      
-      try {
-        setIsDetecting(true);
-        
-        // Take a quick snapshot
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.3,
-          skipProcessing: true,
-        });
-        
-        if (photo?.uri) {
-          // Detect pose in snapshot (only for front view)
-          if (currentStep === 'front') {
-            const result = await poseDetectorRef.current.detectPose(photo.uri);
-            setIsPoseDetected(result.success && !!result.landmarks);
-          } else {
-            // For back photo, we don't need pose detection, just allow capture
-            setIsPoseDetected(true);
-          }
-        }
-      } catch (error) {
-        // Silently fail
-      } finally {
-        setIsDetecting(false);
-      }
-    }, 2000);
-  }, [isDetecting, photos, currentStep]);
+  // No automatic photos at runtime — capture only when user taps shutter.
+  // Pose detection could run on the photo after user taps, if needed later.
 
-  // Stop detection and countdown when component unmounts or photo is taken
+  // Stop countdown when component unmounts
   useEffect(() => {
     return () => {
-      if (detectionInterval.current) {
-        clearInterval(detectionInterval.current);
-        detectionInterval.current = null;
-      }
       if (countdownTimeoutRef.current) {
         clearTimeout(countdownTimeoutRef.current);
         countdownTimeoutRef.current = null;
@@ -141,21 +104,9 @@ export default function PhotoCaptureScreen() {
     };
   }, []);
 
-  // Start detection when pose detector is ready and camera is active
+  // Allow capture for both steps (no runtime snapshots)
   useEffect(() => {
-    if (poseReady && !isUploadMode && !photos[currentStep]) {
-      startRealtimeDetection();
-    } else if (detectionInterval.current) {
-      clearInterval(detectionInterval.current);
-      detectionInterval.current = null;
-    }
-  }, [poseReady, isUploadMode, photos, currentStep, startRealtimeDetection]);
-
-  // For back photo, auto-set pose detected since we can't detect back poses
-  useEffect(() => {
-    if (currentStep === 'back') {
-      setIsPoseDetected(true);
-    }
+    setIsPoseDetected(false);
   }, [currentStep]);
 
   // Countdown timer: when it hits 0, capture
@@ -202,12 +153,6 @@ export default function PhotoCaptureScreen() {
   };
 
   const handlePhotoTaken = (uri: string) => {
-    // Stop detection
-    if (detectionInterval.current) {
-      clearInterval(detectionInterval.current);
-      detectionInterval.current = null;
-    }
-    
     // Save photo for current step
     setPhotos(prev => ({ ...prev, [currentStep]: uri }));
     
@@ -573,33 +518,33 @@ const styles = StyleSheet.create({
   },
   stepIndicator: {
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontFamily: 'ManropeMedium',
-    color: 'rgba(255,255,255,0.7)',
-    letterSpacing: 1,
     marginBottom: 8,
   },
+  stepLabel: {
+    fontSize: 10,
+    fontFamily: 'ManropeMedium',
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
   stepTitle: {
-    fontSize: 24,
+    fontSize: 16,
     fontFamily: 'ManropeSemiBold',
     color: Colors.white,
   },
   instructionContainer: {
     backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    marginHorizontal: 32,
-    borderRadius: 12,
-    marginBottom: 20,
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+    marginHorizontal: 40,
+    borderRadius: 10,
+    marginBottom: 4,
   },
   instructionContainerDetected: {
     backgroundColor: 'rgba(34, 197, 94, 0.85)',
   },
   instruction: {
-    fontSize: 15,
+    fontSize: 12,
     fontFamily: 'ManropeMedium',
     color: Colors.white,
     textAlign: 'center',
