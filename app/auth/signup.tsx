@@ -39,13 +39,24 @@ export default function SignUpScreen() {
     InterRegular: Inter_400Regular,
   });
 
-  // Configure Google Sign-In
+  // Configure Google Sign-In (iOS requires iosClientId or GoogleService-Info.plist)
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: GOOGLE_CONFIG.webClientId,
-      offlineAccess: GOOGLE_CONFIG.offlineAccess,
-      scopes: [...GOOGLE_CONFIG.scopes],
-    });
+    if (Platform.OS === 'ios' && !GOOGLE_CONFIG.iosClientId) {
+      return; // Skip configure on iOS until iosClientId is set to avoid native crash
+    }
+    try {
+      const config: Parameters<typeof GoogleSignin.configure>[0] = {
+        webClientId: GOOGLE_CONFIG.webClientId,
+        offlineAccess: GOOGLE_CONFIG.offlineAccess,
+        scopes: [...GOOGLE_CONFIG.scopes],
+      };
+      if (Platform.OS === 'ios' && GOOGLE_CONFIG.iosClientId) {
+        config.iosClientId = GOOGLE_CONFIG.iosClientId;
+      }
+      GoogleSignin.configure(config);
+    } catch (e) {
+      console.warn('Google Sign-In configure failed:', e);
+    }
   }, []);
 
   if (!fontsLoaded) {
