@@ -321,6 +321,7 @@ export default function PhotoCaptureScreen() {
             ref={cameraRef}
             style={styles.camera}
             facing={facing}
+            ratio="16:9"
           />
         )}
 
