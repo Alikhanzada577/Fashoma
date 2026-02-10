@@ -10,6 +10,7 @@ import {
   Dimensions,
   LayoutChangeEvent,
   Alert,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,6 +65,8 @@ export default function ReviewTwinScreen() {
   // Image dimensions for overlay
   const [previewDimensions, setPreviewDimensions] = useState({ width: PREVIEW_WIDTH, height: 360 });
   const [imageAspectRatio, setImageAspectRatio] = useState(0.75); // Default 3:4 portrait
+  /** When true, show connection lines between body points; when false, only dots. Default on. */
+  const [showSkeletonLines, setShowSkeletonLines] = useState(true);
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplayRegular: PlayfairDisplay_400Regular,
@@ -323,6 +326,22 @@ export default function ReviewTwinScreen() {
           </Text>
         </View>
 
+        {/* Body guide toggle: connection lines on/off; dots always shown */}
+        {shouldShowSilhouette && (
+          <View style={styles.bodyGuideToggleRow}>
+            <Text style={styles.bodyGuideToggleLabel}>Show body guide</Text>
+            <Text style={styles.bodyGuideToggleHint}>
+              {showSkeletonLines ? '(Lines & points)' : '(Points only)'}
+            </Text>
+            <Switch
+              value={showSkeletonLines}
+              onValueChange={setShowSkeletonLines}
+              trackColor={{ false: Colors.gray[300], true: Colors.primary + '80' }}
+              thumbColor={showSkeletonLines ? Colors.primary : Colors.gray[100]}
+            />
+          </View>
+        )}
+
         {/* Avatar Preview with Outline Overlay */}
         <View style={styles.avatarContainer}>
           <View 
@@ -352,6 +371,7 @@ export default function ReviewTwinScreen() {
                       fillColor="rgba(80, 120, 100, 0.3)"
                       handleColor="#FFFFFF"
                       handleRadius={6}
+                      showSkeletonLines={showSkeletonLines}
                     />
                   </View>
                 )}
@@ -580,6 +600,26 @@ const styles = StyleSheet.create({
     fontFamily: 'ManropeRegular',
     color: Colors.text.secondary,
     textAlign: 'center',
+  },
+  bodyGuideToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  bodyGuideToggleLabel: {
+    fontSize: 15,
+    fontFamily: 'ManropeMedium',
+    color: Colors.text.primary,
+  },
+  bodyGuideToggleHint: {
+    fontSize: 12,
+    fontFamily: 'ManropeRegular',
+    color: Colors.text.secondary,
+    marginLeft: 8,
+    flex: 1,
   },
   avatarContainer: {
     backgroundColor: Colors.white,

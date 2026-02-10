@@ -76,6 +76,8 @@ interface EditableBodySilhouetteProps {
   handleColor?: string;
   /** Point handle radius */
   handleRadius?: number;
+  /** When false, hide only the skeleton/connection lines; dotted points stay visible. Default true. */
+  showSkeletonLines?: boolean;
 }
 
 /**
@@ -121,6 +123,7 @@ const EditableBodySilhouette: React.FC<EditableBodySilhouetteProps> = ({
   fillColor = 'rgba(80, 120, 100, 0.3)',
   handleColor = '#FFFFFF',
   handleRadius = 8,
+  showSkeletonLines = true,
 }) => {
   const [activePoint, setActivePoint] = useState<EditableLandmarkKey | null>(null);
 
@@ -275,17 +278,19 @@ const EditableBodySilhouette: React.FC<EditableBodySilhouetteProps> = ({
   return (
     <View style={[styles.container, { width, height }]} pointerEvents={editable ? 'auto' : 'none'}>
       <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
-        {/* Filled polygon silhouette */}
-        <Polygon
-          points={polygonPoints}
-          fill={fillColor}
-          stroke={strokeColor}
-          strokeWidth={strokeWidth}
-          strokeLinejoin="round"
-        />
-        
-        {/* Connection lines (skeleton) */}
-        {connectionLines.map(line => (
+        {/* Filled polygon silhouette - hidden when toggle off so only dots show */}
+        {showSkeletonLines && (
+          <Polygon
+            points={polygonPoints}
+            fill={fillColor}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinejoin="round"
+          />
+        )}
+
+        {/* Connection lines (skeleton) - hidden when showSkeletonLines is false */}
+        {showSkeletonLines && connectionLines.map(line => (
           <Line
             key={line.key}
             x1={line.x1}
@@ -298,14 +303,14 @@ const EditableBodySilhouette: React.FC<EditableBodySilhouetteProps> = ({
             opacity={0.7}
           />
         ))}
-        
-        {/* Draggable point handles */}
+
+        {/* Draggable point handles (dots) - always visible */}
         {EDITABLE_LANDMARKS.map(key => {
           const pos = pointPositions[key];
           if (!pos) return null;
-          
+
           const isActive = activePoint === key;
-          
+
           return (
             <Circle
               key={key}
@@ -320,7 +325,7 @@ const EditableBodySilhouette: React.FC<EditableBodySilhouetteProps> = ({
           );
         })}
       </Svg>
-      
+
       {/* Invisible touch targets for each point */}
       {editable && EDITABLE_LANDMARKS.map(key => {
         const pos = pointPositions[key];
