@@ -1,24 +1,14 @@
 /**
  * API Configuration
- * Centralized configuration for API endpoints and settings
+ * All clients use the same backend URL. No hardcoded IPs.
+ * Optional: set EXPO_PUBLIC_API_URL in .env to override (e.g. your machine IP for local dev).
  */
 
-import { Platform } from 'react-native';
+const PRODUCTION_API_URL = 'https://fashoma-backend.vercel.app/api/v1';
 
-// Get the correct localhost URL based on platform
-const getLocalHostUrl = () => {
-  if (Platform.OS === 'android') {
-   
-    return 'http://192.168.100.187:5000/api/v1';
-  }
-  // For iOS and web
-  return 'http://localhost:5000/api/v1';
-};
-
-// Development API URL - Use getLocalHostUrl() for local backend, or live URL below
-export const API_BASE_URL = __DEV__ 
-  ? 'https://fashoma-backend.vercel.app/api/v1'
-  : 'https://fashoma-backend.vercel.app/api/v1';
+export const API_BASE_URL =
+  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL?.trim()) ||
+  PRODUCTION_API_URL;
 
 export const API_TIMEOUT = 30000; // 30 seconds
 

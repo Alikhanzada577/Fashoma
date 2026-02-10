@@ -329,7 +329,7 @@ export default function ProcessingScreen() {
             </>
           ) : (
             <>
-              <Text style={styles.title}>Analyzing your{'\n'}body pose</Text>
+              <Text style={styles.title}>Analyzing your body </Text>
               <Text style={styles.subtitle}>{processingStatus}</Text>
             </>
           )}

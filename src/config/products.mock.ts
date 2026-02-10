@@ -12,9 +12,9 @@ export const LOCAL_PRODUCT_IMAGES = {
   tshirtFront: require('@/assets/Product/Tshirt-front-photo.png'),
   tshirtBack: require('@/assets/Product/T_Shirt_Design_backpng.png'),
   pantsFront: require('@/assets/Product/Pant_1_Front1.png'),
-  pantsBack: require('@/assets/Product/Pant_1_Backpng.png'),
+  pantsBack: require('@/assets/Product/Pant_1_Front1.png'),
 };
-
+ 
 /**
  * Standard shirt sizes with realistic measurements (in cm)
  * Based on typical men's shirt sizing

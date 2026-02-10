@@ -138,10 +138,21 @@ export default function SignUpScreen() {
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         // Play services not available or outdated
         Alert.alert('Error', 'Google Play Services not available');
-      } else {
-        // Other errors
+      } else if (
+        error.code === 10 ||
+        error.code === '10' ||
+        (error.message && String(error.message).includes('DEVELOPER_ERROR'))
+      ) {
         Alert.alert(
-          'Google Sign-Up Failed', 
+          'Google Sign-In: Developer Error',
+          'Configuration issue in Google Cloud Console.\n\n' +
+            '• Release APK? Add the RELEASE SHA-1 (from eas credentials → Android → Keystore) to the same Android OAuth client.\n' +
+            '• Dev build? Add debug SHA-1. Package name: com.ali94200.fashoma\n' +
+            '• See GOOGLE_AUTH_SETUP.md for full steps.'
+        );
+      } else {
+        Alert.alert(
+          'Google Sign-Up Failed',
           error.message || 'An error occurred during Google Sign-Up'
         );
       }
